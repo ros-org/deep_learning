@@ -1,0 +1,3 @@
+/home/bailiangliang/deep_learning_deploy_on_pc/trt_inference_unetpp/build/CMakeFiles/rebuild_cache.dir
+/home/bailiangliang/deep_learning_deploy_on_pc/trt_inference_unetpp/build/CMakeFiles/edit_cache.dir
+/home/bailiangliang/deep_learning_deploy_on_pc/trt_inference_unetpp/build/CMakeFiles/example.dir
