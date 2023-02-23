@@ -1,0 +1,8 @@
+\subsubsection usage Usage
+\verbatim
+<node name="camera_openvino_cfg" pkg="camera_openvino_cfg" type="camera_openvino_cfg">
+  <param name="trig" type="int" value="0" />
+  <param name="offline_path" type="str" value="" />
+</node>
+\endverbatim
+

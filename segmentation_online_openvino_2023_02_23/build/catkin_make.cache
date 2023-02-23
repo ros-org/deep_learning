@@ -1,0 +1,2 @@
+camera_openvino
+-DCATKIN_DEVEL_PREFIX=/home/leapting/jun_ws/deploy_openvino/devel -DCMAKE_INSTALL_PREFIX=/home/leapting/jun_ws/deploy_openvino/install -G Unix Makefiles

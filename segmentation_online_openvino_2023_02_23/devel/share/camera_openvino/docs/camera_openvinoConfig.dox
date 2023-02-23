@@ -1,0 +1,7 @@
+\subsubsection parameters ROS parameters
+
+Reads and maintains the following parameters on the ROS server
+
+- \b "~trig" : \b [int] trig min: 0, default: 0, max: 2
+- \b "~offline_path" : \b [str] offline_path min: , default: , max: 
+

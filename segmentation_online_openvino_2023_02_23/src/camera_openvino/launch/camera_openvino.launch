@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- <node name="camera_tensorrt_cleaner" pkg="camera_openvino" type="camera_openvino" output ="screen">
+    <rosparam subst_value="true">
+      ns: cleaner
+      imgC: 3
+      imgH: 416
+      imgW: 512
+      modelFilePath: ~/work/cv/2023_02_13_openvino_deployment/deploy_openvino_2/src/camera_openvino/cfg/416x512.onnx
+      classNum: 3
+    </rosparam>
+  </node> -->
+
+  <node name="camera_openvino_solar_panel" pkg="camera_openvino" type="camera_openvino" output ="screen">
+    <rosparam subst_value="true">
+      ns: solar_panel
+      imgC: 3
+      imgH: 400
+      imgW: 640
+      modelFilePath: ~/jun_ws/deploy_openvino/src/camera_openvino/cfg/400x640.onnx
+      classNum: 2
+    </rosparam>
+  </node>
+
+  <node name="rvizvisualisation" pkg="rviz" type="rviz" output="log" args="-d $(find camera_openvino)/solar.rviz" />
+
+</launch>
+
