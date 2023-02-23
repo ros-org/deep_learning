@@ -4,7 +4,7 @@
 
 
 
-目前可以在法上，用 OpenVino 运行在线版的分割模型。测试的 6 个操作步骤如下：
+目前可以在法兰泰克上，用 OpenVino 运行在线版的分割模型。测试的 6 个操作步骤如下：
 
 1. 用 ToDesk 远程登录法兰泰克，进入模型的 deploly_openvino 文件夹，使用终端命令： cd ~/jun_ws/deploly_openvino
 2. 启动 setup 文件，终端命令： source devel/setup.bash
