@@ -18,3 +18,8 @@
 
    <img src="assets/image-20230303100215353.png" alt="image-20230303100215353" style="zoom:80%;" />
 
+
+
+如果是进行测试，在终端中使用如下命令，其中 source 是测试图片的路径。
+
+yolo segment predict model=solar_all_data_seg_n_50.pt source="image" save conf=0.5
