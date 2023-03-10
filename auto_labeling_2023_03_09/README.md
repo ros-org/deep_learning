@@ -22,18 +22,19 @@
 
 a. 较好的情况。
 
-<img src="assets/image-20230310094433903.png" alt="image-20230310094433903" style="zoom:50%;" />
+<img src="assets/image-20230310094433903.png" alt="image-20230310094433903" style="zoom: 33%;" />
 
-<img src="assets/image-20230310094056483.png" alt="image-20230310094056483" style="zoom:50%;" />
+<img src="assets/image-20230310094056483.png" alt="image-20230310094056483" style="zoom: 33%;" />
 
 b. 标注不好的情况。
 
-<img src="assets/image-20230310094559343.png" alt="image-20230310094559343" style="zoom:50%;" />
+<img src="assets/image-20230310094559343.png" alt="image-20230310094559343" style="zoom: 33%;" />
 
 
 
-从以上标注情况来看，后续可以从 2 个方面改进：
+从以上标注情况来看，后续可以从 3 个方面改进：
 
 1. 持续使用更多数据进行训练，使得模型的预测结果更为准确。
-2. 在生成标注时，优化模型的输出参数，以及生成标注的参数。
+2. 使用不同的训练参数，包括模型的 momentum, optimizer 等。
+3. 在生成标注时，优化模型的输出参数，以及生成标注的参数。
 
