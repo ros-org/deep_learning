@@ -1,0 +1,14 @@
+prefix=/home/shawn/WorkSpace/Opencv/opencv_ffmepg/FFmpeg-release-4.2/install
+exec_prefix=${prefix}
+libdir=/home/shawn/WorkSpace/Opencv/opencv_ffmepg/FFmpeg-release-4.2/install/lib
+includedir=/home/shawn/WorkSpace/Opencv/opencv_ffmepg/FFmpeg-release-4.2/install/include
+
+Name: libavutil
+Description: FFmpeg utility library
+Version: 56.31.100
+Requires: 
+Requires.private: 
+Conflicts:
+Libs: -L${libdir}  -lavutil 
+Libs.private: -pthread -lm
+Cflags: -I${includedir}
