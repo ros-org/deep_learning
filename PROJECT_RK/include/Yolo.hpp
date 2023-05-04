@@ -25,7 +25,7 @@ public:
     ~Yolo();
 
     int init(YOLO_CFG_t *pcfg);
-    int run(unsigned char *p_feed_data,vector<float *> &output);
+    int run(unsigned char *p_feed_data, const std::string& imgFmt, vector<float *> &output);
     void show_res(Mat &img,vector<float *> &res);
 
 private:

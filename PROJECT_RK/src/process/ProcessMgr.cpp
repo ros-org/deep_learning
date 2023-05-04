@@ -32,50 +32,17 @@ int ProcessMgr::init()
     char* portName = "/dev/ttyS3";                               // RKNN 烧写系统后 dev下的端口号，没有 ttyS3 说明系统有问题，
     m_uart = Uart(portName);                                     // 通信端口号，
     m_bdebug = true;                                             // 调试模式标志(true则会写日志和保存部分结果图)
-    m_b_detect = false;                                          // 检测模型标志
-    m_b_seg = false;                                             // 分割算法标志
+    m_b_detect = true;                                           // 检测模型(大模型)是否运行标志
+    m_b_detect2 = true;                                          // 检测模型(小模型)是否运行标志
+    m_b_seg = true;                                              // 分割算法标志
     m_b_cla = true;                                              // 清洁度分类标志
     minCleannessValue = 10.f;                                    // 清洁度最小值
     maxCleannessValue = 90.f;                                    // 清洁度最大值
     m_b_weatherClassification = true;                            // 是否运行天气分类
 
-    mpConfiger = Configer::GetInstance();                         
+    mpConfiger = Configer::GetInstance(); 
 
-    if (m_b_detect) 
-    {   std::cout<<"Loading detection model..."<<std::endl;
-        m_p_yolo_cfg = mpConfiger->get_yolo_cfg();
-        ret = mYolo.init(m_p_yolo_cfg);
-        CHECK_EXPR(ret != 0,-1);
-    }
-
-    if (m_b_seg) 
-    {
-        std::cout<<"Loading segementation model..."<<std::endl;
-        m_p_seg_cfg = mpConfiger->get_seg_cfg();
-        ret = mSeg.init(m_p_seg_cfg);
-        CHECK_EXPR(ret != 0,-1);
-    }
-
-    if (m_b_weatherClassification) 
-    {
-        std::cout<<"Loading weather classification model..."<<std::endl;
-        m_p_cla_weather_cfg = mpConfiger->get_cla_weather_cfg();
-        ret = mCla_weather.init(m_p_cla_weather_cfg);
-        CHECK_EXPR(ret != 0,-1);
-    }
-
-    if (m_b_cla) 
-    {
-        std::cout<<"Loading cleanness classification model..."<<std::endl;
-        m_p_cla_cfg = mpConfiger->get_cla_cfg();
-        ret = mCla.init(m_p_cla_cfg);
-
-        //清洁度量化初始化
-        getCleannessQuaWeights(m_p_cla_cfg->cls_num);
-        CHECK_EXPR(ret != 0,-1);
-    }
-
-    ret = m_CapProcess.init();    // 在该函数中开启了获取图像的线程
+    ret = m_CapProcess.init();                                   // 在该函数中开启了获取图像的线程
     CHECK_EXPR(ret != 0,-1);
 
     m_uart.init();
@@ -88,7 +55,75 @@ int ProcessMgr::init()
         int size = strlen(data);
         int nwrite = write(m_debug_fd,data,strlen(data));
         CHECK_EXPR(nwrite != size,-1);
+    } 
+
+    char visionFrameVersion[32];
+    getVisionFrameVersion(visionFrameVersion);  
+    writeMsgToLogfile("当前视觉框架版本号:",visionFrameVersion); 
+
+    if (m_b_detect) 
+    {   
+        char detectionModelVersion[32]; 
+        getDetectionModelVersion(detectionModelVersion);
+        writeMsgToLogfile("检测模型1版本号:",detectionModelVersion); 
+
+        std::cout<<"Loading detection model..."<<std::endl;
+        m_p_yolo_cfg = mpConfiger->get_yolo_cfg();
+        ret = mYolo.init(m_p_yolo_cfg);
+        CHECK_EXPR(ret != 0,-1);
     }
+
+    if (m_b_detect2) 
+    {   
+        char detection2ModelVersion[32]; 
+        getDetection2ModelVersion(detection2ModelVersion);
+        writeMsgToLogfile("检测模型2版本号:",detection2ModelVersion); 
+
+        std::cout<<"Loading detection2 model..."<<std::endl;
+        m_p_yolo_cfg2 = mpConfiger->get_yolo_cfg2();
+        ret = mYolo2.init(m_p_yolo_cfg2);
+        CHECK_EXPR(ret != 0,-1);
+    }
+
+    if (m_b_seg) 
+    {
+        char segmentationMdelVersion[32];
+        getSegmentationModelVersion(segmentationMdelVersion);
+        writeMsgToLogfile("分割模型版本号:", segmentationMdelVersion);
+
+        std::cout<<"Loading segementation model..."<<std::endl;
+        m_p_seg_cfg = mpConfiger->get_seg_cfg();
+        ret = mSeg.init(m_p_seg_cfg);
+        CHECK_EXPR(ret != 0,-1);
+    }
+
+    if (m_b_weatherClassification) 
+    {
+        char weatherModelVersion[32];
+        getWeatherModelVersion(weatherModelVersion);
+        writeMsgToLogfile("天气模型版本号:", weatherModelVersion);
+
+        std::cout<<"Loading weather classification model..."<<std::endl;
+        m_p_cla_weather_cfg = mpConfiger->get_cla_weather_cfg();
+        ret = mCla_weather.init(m_p_cla_weather_cfg);
+        CHECK_EXPR(ret != 0,-1);
+    }
+
+    if (m_b_cla) 
+    {
+        char cleannessModelVersion[32];
+        getClealinessModelVersion(cleannessModelVersion);
+        writeMsgToLogfile("清洁度模型版本号:", cleannessModelVersion);
+
+        std::cout<<"Loading cleanness classification model..."<<std::endl;
+        m_p_cla_cfg = mpConfiger->get_cla_cfg();
+        ret = mCla.init(m_p_cla_cfg);
+
+        //清洁度量化初始化
+        getCleannessQuaWeights(m_p_cla_cfg->cls_num);
+        CHECK_EXPR(ret != 0,-1);
+    }
+
     return 0;
 }
 
@@ -122,8 +157,14 @@ int ProcessMgr::run()
     Mat im_classify_cleanliness_part;                           //将清洁度分类的图切一块
     Mat im_classify_cleanliness_part_resize;                    //清洁度图，将im_classify_cleanliness_part进行resize操作
     //清洁度图，将im_classify_cleanliness_part_resize由HWC转CHW
-    uint8_t chwImgCleanness[3*m_p_cla_cfg->feed_w*m_p_cla_cfg->feed_h];                         
-    Mat im_detect, im_detect_rgb;                               //用于检测的图
+    uint8_t chwImgCleanness[3*m_p_cla_cfg->feed_w*m_p_cla_cfg->feed_h];
+    //检测图，将im_detect_rgb由HWC转CHW 
+    uint8_t chwImgDet[3*m_p_yolo_cfg->feed_w*m_p_yolo_cfg->feed_h]; 
+    //检测图2，将im_detect_rgb2由HWC转CHW 
+    uint8_t chwImgDet2[3*m_p_yolo_cfg2->feed_w*m_p_yolo_cfg2->feed_h];                       
+    Mat im_detect,im_detect2, im_detect_rgb,im_detect_rgb2;     //用于检测的图
+    //检测图，将im_seg_rgb由HWC转CHW
+    uint8_t chwImgSeg[3*m_p_seg_cfg->feed_w*m_p_seg_cfg->feed_h];
     Mat im_seg, im_seg_rgb;                                     //用于分割的图
     int det_cnt = 0;                                            //检测模型运行次数
     int seg_cnt = 0;                                            //分割模型运行次数
@@ -293,8 +334,8 @@ int ProcessMgr::run()
         //------------------------>5、分类：清洁度检测<-----------------------//
         if(m_b_cla)
         {
-            std::cout<<"--------------------Running classification model----------------------"<<cnt<<std::endl;
-            writeMsgToLogfile2("--------------Running classification model--------------", cnt);
+            std::cout<<"--------------------Running cleanliness classification model----------------------"<<cnt<<std::endl;
+            writeMsgToLogfile2("--------------Running cleanliness classification model--------------", cnt);
             timer.start();
             //5.1图像预处理
             col_center = frame.cols/2 + 150;
@@ -334,10 +375,11 @@ int ProcessMgr::run()
             timer.start();
             cv::resize(frame, im_detect, cv::Size(m_p_yolo_cfg->feed_w, m_p_yolo_cfg->feed_h), (0, 0), (0, 0), cv::INTER_LINEAR);
             cv::cvtColor(im_detect, im_detect_rgb, cv::COLOR_BGR2RGB);
+            HWC2CHW(im_detect_rgb, chwImgDet);
 
             vector<float *> res;
             res.clear();
-            int ret = mYolo.run(im_detect_rgb.data,res);
+            int ret = mYolo.run(chwImgDet, "CHW", res);
             CHECK_EXPR(ret != 0,-1);
             timer.end("Detect");
 
@@ -455,7 +497,8 @@ int ProcessMgr::run()
             cv::resize(frame, im_seg, cv::Size(m_p_seg_cfg->feed_w, m_p_seg_cfg->feed_h), 
                                                         (0, 0), (0, 0), cv::INTER_LINEAR);
             cv::cvtColor(im_seg, im_seg_rgb, cv::COLOR_BGR2RGB);
-            int ret = mSeg.run(im_seg_rgb.data,seg_res);
+            HWC2CHW(im_seg_rgb, chwImgSeg);
+            int ret = mSeg.run(chwImgSeg, "CHW", seg_res);
             CHECK_EXPR(ret != 0,-1);
             timer.end("Seg");
 
@@ -598,13 +641,12 @@ void ProcessMgr::writeMsgToLogfile(const std::string& strMsg,  unsigned char inf
     tm_YMDHMS currentTime;
 	struct tm * localTime;
 	time_t nowtime;
-	time(&nowtime);                                                                   //得到当前系统时间
-	localTime = localtime(&nowtime);                                //将nowtime变量中的日历时间转化为本地时间，存入到指针为p的时间结构体中
+	time(&nowtime);                              //得到当前系统时间
+	localTime = localtime(&nowtime);             //将nowtime变量中的日历时间转化为本地时间，存入到指针为p的时间结构体中
     currentTime.changeTmToYmdhms(*localTime);    //Change tm format data into tm_YMDHMS;
 	
     char* logBuff = new char[1024];
     snprintf(logBuff,1024,"%d-%d-%d-%d-%d-%d: %s:%d;\n", currentTime.tm_year,currentTime.tm_mon,currentTime.tm_mday,currentTime.tm_hour, currentTime.tm_min,currentTime.tm_sec,strMsg.c_str(), int(info));
-    // std::cout<<logBuff<<std::endl;
     int nwrite = write(m_debug_fd,logBuff,strlen(logBuff));
     if(nullptr != logBuff)
     {
@@ -619,8 +661,8 @@ void ProcessMgr::writeMsgToLogfile2(const std::string& strMsg,  float info)
     tm_YMDHMS currentTime;
 	struct tm * localTime;
 	time_t nowtime;
-	time(&nowtime);                                                                   //得到当前系统时间
-	localTime = localtime(&nowtime);                                //将nowtime变量中的日历时间转化为本地时间，存入到指针为p的时间结构体中
+	time(&nowtime);                              //得到当前系统时间
+	localTime = localtime(&nowtime);             //将nowtime变量中的日历时间转化为本地时间，存入到指针为p的时间结构体中
     currentTime.changeTmToYmdhms(*localTime);    //Change tm format data into tm_YMDHMS;
 	
     char* logBuff = new char[1024];
@@ -632,6 +674,28 @@ void ProcessMgr::writeMsgToLogfile2(const std::string& strMsg,  float info)
         logBuff = nullptr;
     }
 }
+
+
+
+void ProcessMgr::writeMsgToLogfile(const std::string& strMsg,  char info[32])
+{
+    tm_YMDHMS currentTime;
+	struct tm * localTime;
+	time_t nowtime;
+	time(&nowtime);                              //得到当前系统时间
+	localTime = localtime(&nowtime);             //将nowtime变量中的日历时间转化为本地时间，存入到指针为p的时间结构体中
+    currentTime.changeTmToYmdhms(*localTime);    //Change tm format data into tm_YMDHMS;
+	
+    char* logBuff = new char[1024];
+    snprintf(logBuff,1024,"%d-%d-%d-%d-%d-%d: %s %s;\n", currentTime.tm_year,currentTime.tm_mon,currentTime.tm_mday,currentTime.tm_hour, currentTime.tm_min,currentTime.tm_sec,strMsg.c_str(), info);
+    int nwrite = write(m_debug_fd,logBuff,strlen(logBuff));
+    if(nullptr!=logBuff)
+    {
+        delete [] logBuff;
+        logBuff = nullptr;
+    }
+}
+
 
 
 int ProcessMgr::saveImage(INPUT std::string& saveDir, INPUT Mat& im, INPUT int& cnt, INPUT const int& saveFrequency)

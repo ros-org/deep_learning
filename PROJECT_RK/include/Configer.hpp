@@ -54,6 +54,11 @@ public:
         return &m_yolo_cfg;      // 返回检测配置的参数
     };
 
+    YOLO_CFG_t *get_yolo_cfg2() 
+    {
+        return &m_yolo_cfg2;      // 返回检测配置的参数
+    };
+
     SEG_CFG_t *get_seg_cfg() 
     {
         return &m_seg_cfg;
@@ -74,7 +79,7 @@ public:
     
 private:
     char *m_version;
-    YOLO_CFG_t m_yolo_cfg;
+    YOLO_CFG_t m_yolo_cfg, m_yolo_cfg2;
     SEG_CFG_t m_seg_cfg;
     CLA_CFG_t m_cla_weather_cfg;
     CLA_CFG_t m_cla_cfg;      //结构体CLA_CFG_t 的实例化对象是 配置类 Configer  的 一个类属性  

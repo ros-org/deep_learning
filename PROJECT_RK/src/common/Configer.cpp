@@ -22,10 +22,15 @@ int Configer::init()
     m_yolo_cfg.feed_w = 512;                                       //输入图像的width
     m_yolo_cfg.cls_num = 3;                                        //类别总数
     m_yolo_cfg.model = "/userdata/models/detection.rknn";          //yolov5s rknn模型路经
-    m_init = true;
-    std::cout << "finish Configer::init ..." << std::endl;
-    std::cout << "Configer ..." << m_version << std::endl;
     /**************YOLO parameters**************/
+
+
+    /**************YOLO parameters2*************/
+    m_yolo_cfg2.feed_h = 288;                                       //输入图像的height
+    m_yolo_cfg2.feed_w = 512;                                       //输入图像的width
+    m_yolo_cfg2.cls_num = 3;                                        //类别总数
+    m_yolo_cfg2.model = "/userdata/models/detection2.rknn";          //yolov5s rknn模型路经
+    /**************YOLO parameters2*************/
 
 
     /**************UNET parameters**************/

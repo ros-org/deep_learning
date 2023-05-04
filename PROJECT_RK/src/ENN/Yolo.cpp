@@ -87,7 +87,7 @@ int Yolo::init(YOLO_CFG_t *pcfg)
     return 0;
 }
 
-int Yolo::run(unsigned char *p_feed_data, vector<float *> &output)
+int Yolo::run(unsigned char *p_feed_data, const std::string& imgFmt, vector<float *> &output)
 {
     // Set Input Data
     rknn_input inputs[1];
@@ -95,8 +95,20 @@ int Yolo::run(unsigned char *p_feed_data, vector<float *> &output)
     inputs[0].index = 0;
     inputs[0].type = RKNN_TENSOR_UINT8;
     inputs[0].size = m_feed_height * m_feed_width * 3;
-    inputs[0].fmt = RKNN_TENSOR_NHWC;
     inputs[0].buf = p_feed_data;
+
+    if("CHW" == imgFmt)
+    {
+        inputs[0].fmt = RKNN_TENSOR_NCHW;   //设置预测时tensor的格式NCHW，推理时需要先将图片由hwc转chw
+    }
+    else if("HWC" == imgFmt)
+    {
+        inputs[0].fmt = RKNN_TENSOR_NHWC;   //设置预测时tensor的格式NHWC，这样就不需要做hwc转chw操作了
+    }
+    else
+    {
+        std::cout<<"当前推理图像输入格式错误,仅支持 HWC和CHW 两种..."<<std::endl;
+    }
 
     int ret = rknn_inputs_set(m_ctx, m_io_num.n_input, inputs);
     CHECK_EXPR(ret < 0,-1);

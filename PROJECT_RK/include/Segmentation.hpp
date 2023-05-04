@@ -24,7 +24,7 @@ public:
     ~Segmentation();
 
     int init(SEG_CFG_t *pcfg);
-    int run(unsigned char *p_feed_data,Mat &im_seg);
+    int run(unsigned char *p_feed_data, const std::string& imgFmt, Mat &im_seg);
     void draw_seg(Mat &img, Mat &im_seg);
     int post_process(Mat &im_seg);
 

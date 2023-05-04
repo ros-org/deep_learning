@@ -41,7 +41,6 @@ int Classify::run(unsigned char *p_feed_data, const std::string& imgFmt, int& ou
     inputs[0].index = 0;
     inputs[0].type = RKNN_TENSOR_UINT8;
     inputs[0].size = m_feed_height * m_feed_width * 3;
-     
     inputs[0].buf = p_feed_data;
 
     if("CHW" == imgFmt)

@@ -32,15 +32,27 @@ int Segmentation::init(SEG_CFG_t *pcfg)
     return 0;
 }
 
-int Segmentation::run(unsigned char *p_feed_data,Mat &im_seg)
+int Segmentation::run(unsigned char *p_feed_data,const std::string& imgFmt,Mat &im_seg)
 {
     rknn_input inputs[1];
     memset(inputs, 0, sizeof(inputs));
     inputs[0].index = 0;
     inputs[0].type = RKNN_TENSOR_UINT8;
     inputs[0].size = m_Cfg.feed_h * m_Cfg.feed_w * 3;
-    inputs[0].fmt = RKNN_TENSOR_NHWC;
     inputs[0].buf = p_feed_data;
+
+    if("CHW" == imgFmt)
+    {
+        inputs[0].fmt = RKNN_TENSOR_NCHW;   //设置预测时tensor的格式NCHW，推理时需要先将图片由hwc转chw
+    }
+    else if("HWC" == imgFmt)
+    {
+        inputs[0].fmt = RKNN_TENSOR_NHWC;   //设置预测时tensor的格式NHWC，这样就不需要做hwc转chw操作了
+    }
+    else
+    {
+        std::cout<<"当前推理图像输入格式错误,仅支持 HWC和CHW 两种..."<<std::endl;
+    }
 
     int ret = rknn_inputs_set(m_ctx, m_io_num.n_input, inputs);
     if(ret < 0) 

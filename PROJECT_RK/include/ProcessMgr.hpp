@@ -15,6 +15,7 @@
 #include "Uart.hpp"
 #include"getCurrentTime.h"
 #include"classify.h"
+#include"version.h"
 
 class ProcessMgr                                                // 定义主线程类 wgn
 {
@@ -24,7 +25,6 @@ public:
     static ProcessMgr *GetInstance();                           // 获取实例， wgn
     int init();                                                 // 开始/初始化  wgn
     int start();
-    // int quit();
     int run();
     static void *start_thread(void *);                          // 开启线程 wgn
     static ProcessMgr *mpProcessMgr;                            // 成员指针 wgn
@@ -33,18 +33,22 @@ private:
     int saveImage(INPUT std::string& saveDir, INPUT Mat& im, INPUT int& cnt, INPUT const int& saveFrequency);                        // 保存图像
     void writeMsgToLogfile(const std::string& strMsg,  unsigned char info);    //将消息写入日志文件
     void writeMsgToLogfile2(const std::string& strMsg,  float info);           //将消息写入日志文件,专用于写入float数据
+    void writeMsgToLogfile(const std::string& strMsg,  char info[32]);
     void getCleannessQuaWeights(INPUT const int& cla_num);                     //获取清洁度量化每个类别的清洁度贡献值和对应的权重
     void getCurrentWeight(INPUT const int& currentClaRes, OUTPUT float& x, OUTPUT float& w);
-    bool m_b_detect;                                            //检测模型标志
-    bool m_b_seg;                                               //分割模型标志
-    bool m_b_cla;                                               //分类模型标志
+    bool m_b_detect;                                            //检测模型运行标志(大模型)
+    bool m_b_detect2;                                           //检测模型运行标志(小模型)
+    bool m_b_seg;                                               //分割模型运行标志
+    bool m_b_cla;                                               //分类模型运行标志
     bool m_b_weatherClassification;                             //是否运行天气分类模型           
     // bool m_binit;
     CapProcess m_CapProcess;
     pthread_t m_tid;                                            // 线程id 号，
     Configer *mpConfiger;                                       //模型参数实例指针
     YOLO_CFG_t *m_p_yolo_cfg;                                   //检测模型yolo参数指针
+    YOLO_CFG_t *m_p_yolo_cfg2;                                  //检测模型2 yolo参数指针
     Yolo mYolo;                                                 //检测模型对象
+    Yolo mYolo2;                                                //检测模型2对象
 
     SEG_CFG_t *m_p_seg_cfg;                                     //分割模型unetpp参数指针
     Segmentation mSeg;                                          //分割模型unetpp对象
