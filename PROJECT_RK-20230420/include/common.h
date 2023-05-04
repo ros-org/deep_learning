@@ -1,6 +1,16 @@
 #ifndef __COMMON_H__
 #define __COMMON_H__
 
+#ifndef IN
+#define IN
+#endif
+#ifndef OUT
+#define OUT
+#endif
+#ifndef IN_OUT
+#define IN_OUT
+#endif
+
 #include <stdio.h>
 #include <algorithm>
 #include <vector>
@@ -56,6 +66,5 @@ int writeTxtFile(const char *filename,Dtype *pData,int size);
 void print_vector(const char *title,vector<Dtype > v);
 void print_int_vector(const char *title,vector<int > v);
 bool check_file_exists(char *filepath);
-
 
 #endif

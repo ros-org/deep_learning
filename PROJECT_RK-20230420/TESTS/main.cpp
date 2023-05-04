@@ -109,9 +109,9 @@ int test_img(int argc, char **argv)
 
 
 
+//天气模型离线批量测试
 int main888()
 {
-    //天气模型离线批量测试
     weatherModelOfflineTest();
     std::cout<<"测试结束."<<std::endl;
 }
@@ -122,9 +122,11 @@ int main888()
 int main(int argc, char **argv)
 {
 #if 1
+    // 由于C语言pthread_create函数的原因，导致在C语言中启动线程的方式看着很难受（不直接优雅美观）
     ProcessMgr *ProcessMgr = ProcessMgr::GetInstance();
     ProcessMgr->start();
 
+    // 阻塞主线程
     while (1)
     {
         pause();

@@ -6,6 +6,9 @@
 #include <numeric>
 #include <chrono>     //用于测试时间，该方式更精准
 
+//相机云台归零频率
+#define cameraPtzResetFrequence 100    
+
 using std::chrono::high_resolution_clock;
 using std::chrono::milliseconds;
 
@@ -22,6 +25,7 @@ ProcessMgr *ProcessMgr::GetInstance()
 }
 
 
+
 int ProcessMgr::init()
 {
     int ret = -1;                                                // 初始化一个变量，
@@ -31,8 +35,8 @@ int ProcessMgr::init()
     m_b_detect = false;                                          // 检测模型标志
     m_b_seg = false;                                             // 分割算法标志
     m_b_cla = true;                                              // 清洁度分类标志
-    float minCleannessValue = 10.f;                              // 清洁度最小值
-    float maxCleannessValue = 90.f;                              // 清洁度最大值
+    minCleannessValue = 10.f;                                    // 清洁度最小值
+    maxCleannessValue = 90.f;                                    // 清洁度最大值
     m_b_weatherClassification = true;                            // 是否运行天气分类
 
     mpConfiger = Configer::GetInstance();                         
@@ -67,7 +71,7 @@ int ProcessMgr::init()
         ret = mCla.init(m_p_cla_cfg);
 
         //清洁度量化初始化
-        getCleannessQuaWeights(minCleannessValue, maxCleannessValue, m_p_cla_cfg->cls_num, X, W);
+        getCleannessQuaWeights(m_p_cla_cfg->cls_num);
         CHECK_EXPR(ret != 0,-1);
     }
 
@@ -89,145 +93,6 @@ int ProcessMgr::init()
 }
 
 
-// 实现功能：将单张图像由HWC转CHW；注意：只支持cv::Vec3b格式的Mat(uchar数字，一个像素占一个字节)；
-// ----------------------------------->parameters<----------------------------------
-// inputParas :
-//     hwcImage：待转换的HWC格式原图;
-// outputParas:
-//     chwImage：转换后的CHW格式图像；
-// returnValue:None;
-// ----------------------------------->parameters<----------------------------------
-void HWC2CHW(INPUT const cv::Mat& hwcImage, OUTPUT uint8_t * chwImage)    // void HWC2CHW(INPUT const cv::Mat& hwcImage, OUTPUT uint8_t chwImage [])
-{
-	int imgC = hwcImage.channels();
-	int imgH = hwcImage.rows;
-	int imgW = hwcImage.cols;
-
-	for (int c = 0; c < imgC; ++c)
-	{
-		for (int h = 0; h < imgH; ++h)
-		{
-			for (int w = 0; w < imgW; ++w)
-			{
-				int dstIdx = c * imgH * imgW + h * imgW + w;
-				int srcIdx = h * imgW * imgC + w * imgC + c;
-				chwImage[dstIdx] =  hwcImage.at<cv::Vec3b>(h, w)[c];   
-			}
-		}
-	}
-}
-
-
-void getCleannessQuaWeights(INPUT const float& minCleannessValue, INPUT const float& maxCleannessValue, INPUT const int& cla_num, OUTPUT std::vector<float>& X, OUTPUT std::vector<float>& W)
-{
-    // 检查传入的参数是否异常
-    if(cla_num<2)
-    {
-        std::cout<<"请检查分类类别数:类别数不能小于2..."<<std::endl;
-    }
-
-    float x;
-    float w;
-    for(int i = 0; i<cla_num; ++i)
-    {
-        x = minCleannessValue+(maxCleannessValue-minCleannessValue)/(cla_num-1)*i;
-        w = 1.0/(i+1);
-        X.push_back(x);
-        W.push_back(w);
-    }
-
-    //检查输出的参数是否异常
-    //Do something
-}
-
-
-void getCurrentWeight(INPUT const std::vector<float>& X, INPUT const std::vector<float>& W, INPUT const int& currentClaRes, OUTPUT float& x, OUTPUT float& w)
-{
-    x = X.at(currentClaRes);
-    w = W.at(currentClaRes);
-}
-
-
-void ProcessMgr::writeMsgToLogfile(const std::string& strMsg,  unsigned char info)
-{
-    tm_YMDHMS currentTime;
-	struct tm * localTime;
-	time_t nowtime;
-	time(&nowtime);                                                                   //得到当前系统时间
-	localTime = localtime(&nowtime);                                //将nowtime变量中的日历时间转化为本地时间，存入到指针为p的时间结构体中
-    currentTime.changeTmToYmdhms(*localTime);    //Change tm format data into tm_YMDHMS;
-	
-     char* logBuff = new char[1024];
-    snprintf(logBuff,1024,"%d-%d-%d-%d-%d-%d: %s:%d;\n", currentTime.tm_year,currentTime.tm_mon,currentTime.tm_mday,currentTime.tm_hour, currentTime.tm_min,currentTime.tm_sec,strMsg.c_str(), int(info));
-    // std::cout<<logBuff<<std::endl;
-    int nwrite = write(m_debug_fd,logBuff,strlen(logBuff));
-    if(nullptr!=logBuff)
-    {
-        delete [] logBuff;
-        logBuff = nullptr;
-    }
-}
-
-
-void ProcessMgr::writeMsgToLogfile2(const std::string& strMsg,  float info)
-{
-    tm_YMDHMS currentTime;
-	struct tm * localTime;
-	time_t nowtime;
-	time(&nowtime);                                                                   //得到当前系统时间
-	localTime = localtime(&nowtime);                                //将nowtime变量中的日历时间转化为本地时间，存入到指针为p的时间结构体中
-    currentTime.changeTmToYmdhms(*localTime);    //Change tm format data into tm_YMDHMS;
-	
-    char* logBuff = new char[1024];
-    snprintf(logBuff,1024,"%d-%d-%d-%d-%d-%d: %s   %f;\n", currentTime.tm_year,currentTime.tm_mon,currentTime.tm_mday,currentTime.tm_hour, currentTime.tm_min,currentTime.tm_sec,strMsg.c_str(), info);
-    int nwrite = write(m_debug_fd,logBuff,strlen(logBuff));
-    if(nullptr!=logBuff)
-    {
-        delete [] logBuff;
-        logBuff = nullptr;
-    }
-}
-
-
-// 函数功能：获取当前时间(时间格式是：年月日时分秒)
-// ----------------------------------->parameters<----------------------------------
-// inputParas :
-//     logBuff：时间字符串
-// outputParas:
-//     None
-// returnValue:
-//     None
-// ----------------------------------->parameters<----------------------------------
-void getCurrentTime(OUTPUT char* logBuff)
-{
-    tm_YMDHMS currentTime;
-	struct tm * localTime;
-	time_t nowtime;
-	time(&nowtime);                              //得到当前系统时间
-	localTime = localtime(&nowtime);             //将nowtime变量中的日历时间转化为本地时间，存入到指针为p的时间结构体中
-    currentTime.changeTmToYmdhms(*localTime);    //Change tm format data into tm_YMDHMS;
-    snprintf(logBuff,1024,"%d_%d_%d_%d_%d_%d-", currentTime.tm_year,currentTime.tm_mon,currentTime.tm_mday,currentTime.tm_hour, currentTime.tm_min,currentTime.tm_sec);
-}
-
-
-// 函数功能：int转字符串
-// ----------------------------------->parameters<----------------------------------
-// inputParas :
-//     integer:int数据
-// outputParas:
-//     None
-// returnValue:
-//     str：int转为string格式数据
-// ----------------------------------->parameters<----------------------------------
-std::string intToString(INPUT int& integer)
-{
-	char buf[32] = {0};
-	snprintf(buf, sizeof(buf), "%u", integer);
- 
-	std::string str = buf;
-	return str;
-}
-
 
 void *ProcessMgr::start_thread(void *param)
 {
@@ -243,16 +108,6 @@ int ProcessMgr::start()
     return 0;
 }
 
-
-int ProcessMgr::save_image(Mat &im,char *title)
-{
-    char filename[64];
-    static int cnt = 0;
-    snprintf(filename,sizeof(filename),"output/%s_%d.jpg",title,cnt);
-    printf("==========%d...\n",cnt);
-    cnt++;
-    return 0;
-} 
 
 
 int ProcessMgr::run()
@@ -280,16 +135,16 @@ int ProcessMgr::run()
     int classifyRes = -999;                                     //定义天气分类的类别结果
     int cleanlinessOutput = -999;                               //清洁度单次推理结果。 最脏的类别为：1；越干净类别数越大；
     float cleanlinessOutputs, cleanlinessOutputs2;              //清洁度多次推理结果中间值，当收到相机掉头信号时将结果清零(即清洁度仅计算单趟清洁的结果)
-    float x,  w;                                                //当前清洁度推理结果类别所对应的清洁度贡献值、权重
+    float x,  w;                                                //当前清洁度推理结果类别 所对应的清洁度贡献值、权重
     float cleannessQuaRes;                                      //清洁度量化结果
     Mat seg_res;                                                //分割后的结果图（索引图）
     char buffer[1024];                                          //用于存储被格式化后的路径等字符串
     static int debug_seg_cnt = 0;                               //分割模型运行次数，用于日志中             
     static int debug_det_cnt = 0;                               //检测模型运行次数，用于日志中                                               
-    unsigned char detInfo = 0x01;                               //发送给驱动板的检测(有断裂)消息
-    unsigned char segInfo = 0x02;                               //发送给驱动板的分割(角度太大)消息
-    unsigned char speedDown = 0x03;                             //发送给驱动板的 要下坡了，请减速
-    unsigned char restoreSpeed = 0x04;                          //发送给驱动板的 下坡结束，请恢复到原来的速度
+    unsigned char detInfo = 0x00;                               //发送给驱动板的检测(桥架有断裂)消息
+    unsigned char segInfo = 0x00;                               //发送给驱动板的分割(角度太大)消息
+    unsigned char speedDown = 0x64;                             //发送给驱动板的 要下坡了，请减速
+    unsigned char restoreSpeed = 0x65;                          //发送给驱动板的 下坡结束，请恢复到原来的速度
     bool flag_isRunSegModel = false;                            //是否运行分割模型的标志，检测到桥架框并且无断裂才进行分割;
     bool lastDownhillStatus = false;                            //上次检测到的 是否下桥状态，和最新图的下桥架状态做对比，结果不一致，则发消息并更新状态 
     bool lastfractureStatus = false;                            //上次是否断裂的状态
@@ -318,14 +173,8 @@ int ProcessMgr::run()
         // 1.2、保存原始图像到路径"/userdata/autoImageAcq/"
         if(bSaveOrgImage)
         {
-            char logBuff[1024];
-            getCurrentTime(logBuff);
             std::string imageDir = "/userdata/autoImageAcq/";
-            std::string saveImagePath = imageDir + intToString(cnt)+ ".jpg";
-            if(0 == cnt%4)
-            {
-                cv::imwrite(saveImagePath, frame);   
-            }  
+            saveImage(imageDir, frame, cnt, 4);
         }
         //----------------->1、从缓存区获取图像并保存原始图像<------------------//
 
@@ -341,39 +190,52 @@ int ProcessMgr::run()
 
         // 主线程发消息到消息线程的CT必须大于消息线程的CT
         beginTime = high_resolution_clock::now();
-        ProcessMgr::writeMsgToLogfile2("===========================运行次数============================", cnt);
+        writeMsgToLogfile2("===========================运行次数============================", cnt);
         
         
         //--------------------------->3、消息交互<---------------------------//
         //3、1、发消息：主动先发消息给消息线程
         m_uart.getMsgFromMainThread(msgsTomsgThread);
-        ProcessMgr::writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[0]);
-        ProcessMgr::writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[1]);
-        ProcessMgr::writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[2]);
-        ProcessMgr::writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[3]);
+        writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[0]);
+        writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[1]);
+        writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[2]);
+        writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[3]);
         msgsTomsgThread[2] = 254;
         msgsTomsgThread[3] = 254;
         
         //3.2、收消息：从消息线程获取驱动板发来的消息
         m_uart.sendMsgToMainThread(signalFromMsgThread);
-        ProcessMgr::writeMsgToLogfile("从消息线程获取的转头消息", signalFromMsgThread);
+        writeMsgToLogfile("从消息线程获取的转头消息", signalFromMsgThread);
+        
         //3.3、发消息：将从消息线程拿到的转头消息发给相机线程
         if(255 != signalFromMsgThread)
         {
-            //3.3.1、调用相机的对外消息接口，并将该消息写入到相机线程，然后在相机线程中控制云台运动
-            m_CapProcess.getMsgFromMainThread(signalFromMsgThread);
-            ProcessMgr::writeMsgToLogfile("将相机方向消息发给相机和图像线程", signalFromMsgThread);
-
-            //3.3.2、捕捉相机的方向状态，当相机状态改变，说明单趟重新开始，则清洁度累积数值清零并重新计算；
+            //3.3.1、捕捉相机的方向状态，当相机状态改变，说明单趟重新开始，则清洁度累积数值清零并重新计算；
             cameraStatus2 = signalFromMsgThread;
             if(cameraStatus != cameraStatus2)
             {
                 cleanlinessOutputs = 0.0;
                 cleanlinessOutputs2 = 0.0;
-                ProcessMgr::writeMsgToLogfile("相机方向状态改变", signalFromMsgThread);
+                writeMsgToLogfile("相机方向状态改变", signalFromMsgThread);
             }
             cameraStatus = cameraStatus2;
 
+            //3.3.2、调用相机的对外消息接口，并将该消息写入到相机线程，然后在相机线程中控制云台运动
+            if(cnt%cameraPtzResetFrequence == 0)
+            {
+                //强制修改主线程发给相机线程的信息，用于相机定时垂直方向归零
+                if(1 == signalFromMsgThread)
+                {
+                    signalFromMsgThread = 3;
+                }
+                else if(2 == signalFromMsgThread)
+                {
+                    signalFromMsgThread = 4;
+                }
+            }
+            m_CapProcess.getMsgFromMainThread(signalFromMsgThread);
+            writeMsgToLogfile("将相机方向消息发给相机和图像线程", signalFromMsgThread);
+            
             //3.3.3、相机线程取完方向消息后需要重新置为异常值255
             signalFromMsgThread = 255;
             
@@ -386,19 +248,19 @@ int ProcessMgr::run()
         //      0(100)-->晴天，1(101)-->下雪，2(102)-->下雨，3(103)-->沙尘暴;
         if(m_b_weatherClassification)
         {  
-            std::cout<<"------------------Running weather classification model------------------"<<std::endl;  
-            ProcessMgr::writeMsgToLogfile2("--------------Running weather classification model--------------", cnt);
+            std::cout<<"------------------Running weather classification model------------------"<<cnt<<std::endl;  
+            writeMsgToLogfile2("--------------Running weather classification model--------------", cnt);
             //4.1、图像预处理 
             col_center = frame.cols/2;
             row_center = frame.rows/2 + 130;
-            im_classify_weather_part = frame(cv::Rect(col_center-240, row_center-112, 480, 224));
+            im_classify_weather_part = frame(cv::Rect(col_center-240, row_center-112, 480, 224)).clone();
             cv::resize(im_classify_weather_part, im_classify_weather_part_resize, cv::Size(m_p_cla_weather_cfg ->feed_w,m_p_cla_weather_cfg ->feed_h), (0, 0), (0, 0), cv::INTER_LINEAR);
             HWC2CHW(im_classify_weather_part_resize, chwImgWeather);
             //4.2天气分类推理
             int ret = mCla_weather.run(chwImgWeather, "CHW", classifyRes);
             if(0 != ret)
             {
-                ProcessMgr::writeMsgToLogfile2("天气推理结果异常...", -1);
+                writeMsgToLogfile2("天气推理结果异常...", -1);
             }
             CHECK_EXPR(ret != 0,-1);
  
@@ -421,16 +283,8 @@ int ProcessMgr::run()
             }
 
             //4.4、实时发送天气分类结果到消息线程
-            if(classifyRes > 0) 
-            {
-                msgsTomsgThread[0] = uchar(classifyRes+100);
-                ProcessMgr::writeMsgToLogfile("天气检测:不可以出去工作", msgsTomsgThread[0]);
-            }
-            else
-            {
-                msgsTomsgThread[0] = uchar(classifyRes+100);
-                ProcessMgr::writeMsgToLogfile("天气检测:可以出去工作", msgsTomsgThread[0]);
-            }                                  
+            msgsTomsgThread[0] = uchar(classifyRes+100);
+            writeMsgToLogfile("天气检测发送结果到驱动板:", msgsTomsgThread[0]);                                 
             m_b_weatherClassification = false;    //天气每次上电只需要检测一次
         }
         //--------------------------->4、天气分类<---------------------------//
@@ -439,33 +293,33 @@ int ProcessMgr::run()
         //------------------------>5、分类：清洁度检测<-----------------------//
         if(m_b_cla)
         {
-            std::cout<<"--------------------Running classification model----------------------"<<std::endl;
-            ProcessMgr::writeMsgToLogfile2("--------------Running classification model--------------", cnt);
+            std::cout<<"--------------------Running classification model----------------------"<<cnt<<std::endl;
+            writeMsgToLogfile2("--------------Running classification model--------------", cnt);
             timer.start();
             //5.1图像预处理
             col_center = frame.cols/2 + 150;
             row_center = frame.rows/2 + 150;
-            im_classify_cleanliness_part = frame(cv::Rect(col_center-112, row_center-112, 224, 224));
+            im_classify_cleanliness_part = frame(cv::Rect(col_center-112, row_center-112, 224, 224)).clone();
             cv::resize(im_classify_cleanliness_part, im_classify_cleanliness_part_resize, cv::Size(m_p_cla_cfg->feed_w, m_p_cla_cfg->feed_h), (0, 0), (0, 0), cv::INTER_LINEAR);
             HWC2CHW(im_classify_cleanliness_part_resize, chwImgCleanness);
             //5.2清洁度分类推理
             int ret = mCla.run(chwImgCleanness, "CHW", cleanlinessOutput);
             if(0 != ret)
             {
-                ProcessMgr::writeMsgToLogfile2("清洁度推理结果异常...", -1);
+                writeMsgToLogfile2("清洁度推理结果异常...", -1);
             }
             CHECK_EXPR(ret != 0,-1);
             timer.end("Cla");
             //5.3、统计单趟清洁度，清洗机运行一趟时清洁度是实时变化的，当第二趟开始，重新进行计算；
-            getCurrentWeight(X, W, cleanlinessOutput, x,  w);
+            getCurrentWeight(cleanlinessOutput, x,  w);
             cleanlinessOutputs += x*w;
             cleanlinessOutputs2 += w;
             cleannessQuaRes = cleanlinessOutputs/cleanlinessOutputs2;
-            uchar cleannessQuaResPercent = int(cleannessQuaRes);
+            uchar cleannessQuaResPercent = uchar(int(cleannessQuaRes));
             //5.4、实时发送清洁度到消息线程
             msgsTomsgThread[1] = cleannessQuaResPercent;
-            ProcessMgr::writeMsgToLogfile2("当前清洁度预测类别", float(cleanlinessOutput));
-            ProcessMgr::writeMsgToLogfile2("当前清洁度", cleannessQuaRes);
+            writeMsgToLogfile2("当前清洁度预测类别", float(cleanlinessOutput));
+            writeMsgToLogfile2("当前清洁度", int(cleannessQuaRes));
         }
         //------------------------>5、分类：清洁度检测<-----------------------//
 
@@ -474,7 +328,7 @@ int ProcessMgr::run()
         if (true == m_b_detect) 
         {
             flag_isRunSegModel = false;
-            ProcessMgr::writeMsgToLogfile2("--------------->Running object detect model<----------------:", det_cnt);
+            writeMsgToLogfile2("--------------->Running object detect model<----------------:", det_cnt);
             det_cnt++;
 
             timer.start();
@@ -486,14 +340,20 @@ int ProcessMgr::run()
             int ret = mYolo.run(im_detect_rgb.data,res);
             CHECK_EXPR(ret != 0,-1);
             timer.end("Detect");
+
+            //----------------------------------第一次检测后的自适应切图---------------------------------//
+            //Do something
+            //调用自适应切图类进行切图
+            
+            //----------------------------------第一次检测后的自适应切图---------------------------------//
             
             // 根据最终的检测结果，统计每个类别的数量
-            int bridgeNum = 0;                                     // 当前图片检测出的bridge数量
-            int fractureNum = 0;                                  // 当前图片检测出的fracture数量
-            int lowerBridgeNum = 0;                         // 当前图片检测出的lowerBridge数，一般应该为0或者1
+            int bridgeNum = 0;                                             // 当前图片检测出的bridge数量
+            int fractureNum = 0;                                           // 当前图片检测出的fracture数量
+            int lowerBridgeNum = 0;                                        // 当前图片检测出的lowerBridge数，一般应该为0或者1
             for (int i = 0;i < res.size();i++) 
             {
-                if (res[i][5] == 0.)                                      // 0代表bridge，[bridge,fracture,lowerBridge]
+                if (res[i][5] == 0.)                                       // 0代表bridge，[bridge,fracture,lowerBridge]
                 {
                     bridgeNum++;
                 }
@@ -510,7 +370,7 @@ int ProcessMgr::run()
             }
 
             // 是否将要下桥的状态判断。两次状态不一样则发消息并更新状态;
-            bool latestDownhillStatus = false;        //当前最新图 是否将要下桥架的状态，true为将要下桥架;
+            bool latestDownhillStatus = false;                             // 当前最新图 是否将要下桥架的状态，true为将要下桥架;
             if(lowerBridgeNum > 0)
             {
                 latestDownhillStatus = true;
@@ -521,19 +381,19 @@ int ProcessMgr::run()
                 if(lastDownhillStatus==false && latestDownhillStatus==true)
                 {
                     msgsTomsgThread[2] = speedDown;
-                    ProcessMgr::writeMsgToLogfile("发送减速的消息给消息消息：请减速:", speedDown);
+                    writeMsgToLogfile("发送减速的消息给消息消息：请减速", speedDown);
                 }
                 else
                 {
                     msgsTomsgThread[2] = restoreSpeed;
-                    ProcessMgr::writeMsgToLogfile("发送恢复速度的消息给消息线程:", restoreSpeed);
+                    writeMsgToLogfile("发送恢复速度的消息给消息线程:请恢复速度", restoreSpeed);
                 }
                 // 更新状态
                 lastDownhillStatus = latestDownhillStatus;
             }
 
             //是否有断裂 状态判断，两次状态不一致则发消息。这样可以做到 只发一次断裂/无断裂的消息给驱动板
-            bool latestFractureStatus = false;              //当前最新图 是否桥架断裂的状态，true为断裂;
+            bool latestFractureStatus = false;                             // 当前最新图 是否桥架断裂的状态，true为断裂;
             if(fractureNum > 0)
             {
                 latestFractureStatus = true;
@@ -544,11 +404,11 @@ int ProcessMgr::run()
                 if(lastfractureStatus==false && latestFractureStatus==true)
                 {
                     msgsTomsgThread[3] = detInfo;
-                    ProcessMgr::writeMsgToLogfile("发送检测结果到消息线程：上次无断裂，这次有断裂", detInfo);
+                    writeMsgToLogfile("发送检测结果到消息线程：上次无断裂，这次有断裂", detInfo);
                 }
                 else
                 {
-                    ProcessMgr::writeMsgToLogfile2("发送检测结果到消息线程：上次断裂，这次无断裂", 666);
+                    writeMsgToLogfile2("发送检测结果到消息线程：上次断裂，这次无断裂", 666);
                 }
 
                 lastfractureStatus = latestFractureStatus;
@@ -558,7 +418,7 @@ int ProcessMgr::run()
             if(0 == fractureNum && bridgeNum>=1)
             {
                 flag_isRunSegModel = true;
-                ProcessMgr::writeMsgToLogfile("没检测到断裂且检测到有桥架,分割标识符置为true", flag_isRunSegModel);
+                writeMsgToLogfile("没检测到断裂且检测到有桥架,分割标识符置为true", flag_isRunSegModel);
             }
  
             //保存日志及检测结果图
@@ -588,7 +448,7 @@ int ProcessMgr::run()
         //---------------------------->7、分割<-----------------------------//
         if (true==m_b_seg && true==flag_isRunSegModel) 
         {
-            ProcessMgr::writeMsgToLogfile2("------------>Running seg model<------------", seg_cnt);
+            writeMsgToLogfile2("------------>Running seg model<------------", seg_cnt);
             seg_cnt++;
 
             timer.start();
@@ -603,7 +463,7 @@ int ProcessMgr::run()
             float angle = -999.;
             #if 1
             ret = (int)postProcessingSegRes(seg_res,angle);
-            ProcessMgr::writeMsgToLogfile2("分割后计算角度结果", angle);
+            writeMsgToLogfile2("分割后计算角度结果", angle);
 
             bool latestAngleStatus = false;
             if(angle >= angleThresValue)
@@ -616,11 +476,11 @@ int ProcessMgr::run()
                 if(lastAngleStatus==false && latestAngleStatus==true)
                 {
                     msgsTomsgThread[3] = segInfo;
-                    ProcessMgr::writeMsgToLogfile("发送分割角度结果的消息(上次可以通过，本次无法通过)到消息线程", segInfo);
+                    writeMsgToLogfile("发送分割角度结果的消息(上次可以通过，本次无法通过)到消息线程", segInfo);
                 }
                 else
                 {
-                    ProcessMgr::writeMsgToLogfile2("发送分割角度结果的消息(上次无法通过，本次可以通过)到消息线程", 666);
+                    writeMsgToLogfile2("发送分割角度结果的消息(上次无法通过，本次可以通过)到消息线程", 666);
                 }
 
                 lastAngleStatus = latestAngleStatus;
@@ -672,3 +532,156 @@ int ProcessMgr::run()
     return 0;
 }
 
+
+
+// 实现功能：将单张图像由HWC转CHW；注意：只支持cv::Vec3b格式的Mat(uchar数字，一个像素占一个字节)；
+// ----------------------------------->parameters<----------------------------------
+// inputParas :
+//     hwcImage：待转换的HWC格式原图;
+// outputParas:
+//     chwImage：转换后的CHW格式图像；
+// returnValue:None;
+// ----------------------------------->parameters<----------------------------------
+void HWC2CHW(INPUT const cv::Mat& hwcImage, OUTPUT uint8_t * chwImage)    // void HWC2CHW(INPUT const cv::Mat& hwcImage, OUTPUT uint8_t chwImage [])
+{
+	int imgC = hwcImage.channels();
+	int imgH = hwcImage.rows;
+	int imgW = hwcImage.cols;
+
+	for (int c = 0; c < imgC; ++c)
+	{
+		for (int h = 0; h < imgH; ++h)
+		{
+			for (int w = 0; w < imgW; ++w)
+			{
+				int dstIdx = c * imgH * imgW + h * imgW + w;
+				int srcIdx = h * imgW * imgC + w * imgC + c;
+				chwImage[dstIdx] =  hwcImage.at<cv::Vec3b>(h, w)[c];   
+			}
+		}
+	}
+}
+
+
+void ProcessMgr::getCleannessQuaWeights(INPUT const int& cla_num)
+{
+    // 检查传入的参数是否异常
+    if(cla_num<2)
+    {
+        std::cout<<"请检查分类类别数:类别数不能小于2..."<<std::endl;
+    }
+
+    float x;
+    float w;
+    for(int i = 0; i<cla_num; ++i)
+    {
+        x = minCleannessValue+(maxCleannessValue-minCleannessValue)/(cla_num-1)*i;
+        w = 1.0/(i+1);
+        X.push_back(x);
+        W.push_back(w);
+    }
+
+    //检查输出的参数是否异常
+    //Do something
+}
+
+
+void ProcessMgr::getCurrentWeight(INPUT const int& currentClaRes, OUTPUT float& x, OUTPUT float& w)
+{
+    x = X.at(currentClaRes);
+    w = W.at(currentClaRes);
+}
+
+
+void ProcessMgr::writeMsgToLogfile(const std::string& strMsg,  unsigned char info)
+{
+    tm_YMDHMS currentTime;
+	struct tm * localTime;
+	time_t nowtime;
+	time(&nowtime);                                                                   //得到当前系统时间
+	localTime = localtime(&nowtime);                                //将nowtime变量中的日历时间转化为本地时间，存入到指针为p的时间结构体中
+    currentTime.changeTmToYmdhms(*localTime);    //Change tm format data into tm_YMDHMS;
+	
+    char* logBuff = new char[1024];
+    snprintf(logBuff,1024,"%d-%d-%d-%d-%d-%d: %s:%d;\n", currentTime.tm_year,currentTime.tm_mon,currentTime.tm_mday,currentTime.tm_hour, currentTime.tm_min,currentTime.tm_sec,strMsg.c_str(), int(info));
+    // std::cout<<logBuff<<std::endl;
+    int nwrite = write(m_debug_fd,logBuff,strlen(logBuff));
+    if(nullptr != logBuff)
+    {
+        delete [] logBuff;
+        logBuff = nullptr;
+    }
+}
+
+
+void ProcessMgr::writeMsgToLogfile2(const std::string& strMsg,  float info)
+{
+    tm_YMDHMS currentTime;
+	struct tm * localTime;
+	time_t nowtime;
+	time(&nowtime);                                                                   //得到当前系统时间
+	localTime = localtime(&nowtime);                                //将nowtime变量中的日历时间转化为本地时间，存入到指针为p的时间结构体中
+    currentTime.changeTmToYmdhms(*localTime);    //Change tm format data into tm_YMDHMS;
+	
+    char* logBuff = new char[1024];
+    snprintf(logBuff,1024,"%d-%d-%d-%d-%d-%d: %s   %f;\n", currentTime.tm_year,currentTime.tm_mon,currentTime.tm_mday,currentTime.tm_hour, currentTime.tm_min,currentTime.tm_sec,strMsg.c_str(), info);
+    int nwrite = write(m_debug_fd,logBuff,strlen(logBuff));
+    if(nullptr!=logBuff)
+    {
+        delete [] logBuff;
+        logBuff = nullptr;
+    }
+}
+
+
+int ProcessMgr::saveImage(INPUT std::string& saveDir, INPUT Mat& im, INPUT int& cnt, INPUT const int& saveFrequency)
+{
+    std::string saveImagePath = saveDir + intToString(cnt)+ ".jpg";
+    if(0 == cnt%saveFrequency)
+    {
+        cv::imwrite(saveImagePath, im);   
+    }
+
+    // 将当前最新图片序号保存在文件中，方便下次读取并继续保存
+    // Do something
+} 
+
+
+// 函数功能：获取当前时间(时间格式是：年月日时分秒)
+// ----------------------------------->parameters<----------------------------------
+// inputParas :
+//     logBuff：时间字符串
+// outputParas:
+//     None
+// returnValue:
+//     None
+// ----------------------------------->parameters<----------------------------------
+void getCurrentTime(OUTPUT char* logBuff)
+{
+    tm_YMDHMS currentTime;
+	struct tm * localTime;
+	time_t nowtime;
+	time(&nowtime);                              //得到当前系统时间
+	localTime = localtime(&nowtime);             //将nowtime变量中的日历时间转化为本地时间，存入到指针为p的时间结构体中
+    currentTime.changeTmToYmdhms(*localTime);    //Change tm format data into tm_YMDHMS;
+    snprintf(logBuff,1024,"%d_%d_%d_%d_%d_%d-", currentTime.tm_year,currentTime.tm_mon,currentTime.tm_mday,currentTime.tm_hour, currentTime.tm_min,currentTime.tm_sec);
+}
+
+
+// 函数功能：int转字符串
+// ----------------------------------->parameters<----------------------------------
+// inputParas :
+//     integer:int数据
+// outputParas:
+//     None
+// returnValue:
+//     str：int转为string格式数据
+// ----------------------------------->parameters<----------------------------------
+std::string intToString(INPUT int& integer)
+{
+	char buf[32] = {0};
+	snprintf(buf, sizeof(buf), "%u", integer);
+ 
+	std::string str = buf;
+	return str;
+}

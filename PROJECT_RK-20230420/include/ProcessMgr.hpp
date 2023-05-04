@@ -30,9 +30,11 @@ public:
     static ProcessMgr *mpProcessMgr;                            // 成员指针 wgn
     
 private:                                   
-    int save_image(Mat &im,char *title);                        // 保存图像
+    int saveImage(INPUT std::string& saveDir, INPUT Mat& im, INPUT int& cnt, INPUT const int& saveFrequency);                        // 保存图像
     void writeMsgToLogfile(const std::string& strMsg,  unsigned char info);    //将消息写入日志文件
     void writeMsgToLogfile2(const std::string& strMsg,  float info);           //将消息写入日志文件,专用于写入float数据
+    void getCleannessQuaWeights(INPUT const int& cla_num);                     //获取清洁度量化每个类别的清洁度贡献值和对应的权重
+    void getCurrentWeight(INPUT const int& currentClaRes, OUTPUT float& x, OUTPUT float& w);
     bool m_b_detect;                                            //检测模型标志
     bool m_b_seg;                                               //分割模型标志
     bool m_b_cla;                                               //分类模型标志
@@ -57,6 +59,8 @@ private:
     CLA_CFG_t* m_p_cla_cfg;                                     //清洁度分类参数指针
     Classify mCla;                                              //清洁度分类模型对象
     std::vector<float> X, W;                                    //清洁度所有类别的清洁度贡献值及对应的权重
+    float minCleannessValue;                                    // 清洁度最小值
+    float maxCleannessValue;                                    // 清洁度最大值
 
 };
 

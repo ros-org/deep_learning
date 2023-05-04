@@ -13,8 +13,8 @@ void *CapProcess::start_thread(void *param)
 int CapProcess::init()
 {
     m_start = false;                                                      //当是空图时为false则预测线程也不会取图成功，同时还可以保证每一张图至多被预测线程预测一次;
-    m_bdebug = true;                                                      //控制图片来自本地还是摄像头(true:加载硬盘上的图片检测; false:从摄像头获取图片进行检测) 
-    m_interval = 20;                                                      //帧间隔，摄像头隔m_interval帧向缓存中放图
+    m_bdebug = false;                                                     //控制图片来自本地还是摄像头(true:加载硬盘上的图片检测; false:从摄像头获取图片进行检测) 
+    m_interval = 10;                                                      //帧间隔，摄像头隔m_interval帧向缓存中放图
     total_fram_num = 0;                                                   //总帧数初始化（从摄像头获取到的图的总帧数）
     mainThreadMsg = 255;                                                  //从主线程获取到的云台消息
 
@@ -114,7 +114,7 @@ void CapProcess::InitPtz()
 }
 
 // 云台转动控制
-void CapProcess::ptzControl(INPUT const int& verticalAngle , INPUT const int& horizontalAngle)
+void CapProcess::ptzControl(INPUT const int& horizontalAngle, INPUT const int& verticalAngle)
 {
     //云台转动
     if(0 != CapProcess::g_lLoginHandle)
@@ -129,8 +129,8 @@ void CapProcess::ptzControl(INPUT const int& verticalAngle , INPUT const int& ho
         //     参数5：如参数3是DH_EXTPTZ_FASTGOTO(快速定位)，则代表垂直坐标(0-8192);如参数3是DH_EXTPTZ_EXACTGOTO(三维精确定位),则该参数是垂直较度(0-900);
         //     参数6：如参数3是DH_EXTPTZ_FASTGOTO(快速定位)，代表变倍(4);如参数3是DH_EXTPTZ_EXACTGOTO(三维精确定位),代表变倍(1-128);
         //     参数7：停止标志。对云台八方向操作及镜头操作命令有效,进行其他操作时,本参数应填充 FALSE;
-        //     参数8：支持扩展控制命令参数，支持8种控制命令，具体见NetSdk编程手册78页;
-        ptzControl = CLIENT_DHPTZControlEx(CapProcess::g_lLoginHandle, nChannelId, DH_EXTPTZ_FASTGOTO, horizontalAngle, verticalAngle, 1, FALSE);
+        //     参数8：支持扩展控制命令参数，支持8种控制命令，具体见NetSdk编程手册78页;   
+        ptzControl = CLIENT_DHPTZControlEx2(CapProcess::g_lLoginHandle, nChannelId, DH_EXTPTZ_FASTGOTO, verticalAngle, horizontalAngle, 1, false);
         if (FALSE == ptzControl)
         {
             std::cout<<"云台转动失败"<<std::endl;
@@ -150,24 +150,43 @@ void CapProcess::ptzControl(INPUT const int& verticalAngle , INPUT const int& ho
 void CapProcess::getMsgFromMainThread(INPUT unsigned char& signalValue)
 {
     mainThreadMsg = signalValue;
-    if(1 == mainThreadMsg)
+    switch(mainThreadMsg)
     {
-        //转云台(往左)
-        // ptzControl(730, 10);     // 1P机器
-        ptzControl(930, 10);        // 1.5P机器
-    }
-    else if(2 == mainThreadMsg)
-    {
-        //转云台(往右)
-        // ptzControl(2070, 10);    // 1P机器
-        ptzControl(2470, 10);       // 1.5P机器
-    }
-    else
-    {
+        case 1:
+        {
+            //转云台(往左)
+            // ptzControl(730, 10);     // 1P机器
+            ptzControl(930, 10);        // 1.5P机器
+            break;         
+        }
+
+        case 2:
+        {
+            //转云台(往右)
+            // ptzControl(2070, 10);    // 1P机器
+            ptzControl(2470, 10);       // 1.5P机器
+            break;
+        }
+
+        case 3:
+        {
+            ptzControl(930, 8192);        // 1.5P机器
+            std::cout<<"ptzControl(930, 8192)"<<std::endl;
+            break;
+        }
+
+        case 4:
+        {
+            ptzControl(2470, 8192);     // 1.5P机器
+            std::cout<<"ptzControl(2470, 8192)"<<std::endl;
+            break;
+        }
+
+        default:
         //云台不动
         //Do something
+        break;
     }
-    
     mainThreadMsg = 255;
 }
 
@@ -246,8 +265,7 @@ int CapProcess::start()
             m_start = false;
             // return -1;
         }
-        total_fram_num++;                                         //每次取的帧如果不为空，则帧数加1
-        // std::cout<<"图像获取线程运行中，已获得图像数："<<total_fram_num<<std::endl;  
+        total_fram_num++;                                         
         
         //将离线图写入缓存
         if (m_bdebug == true) 
