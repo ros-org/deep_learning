@@ -3,7 +3,7 @@
 
 int getVisionFrameVersion(OUT char version[32])
 {
-    const char* visionFrame = "v1.0.1";
+    const char* visionFrame = "v1.0.3";
     memcpy(version, visionFrame, 32);
     return 0;
 }
