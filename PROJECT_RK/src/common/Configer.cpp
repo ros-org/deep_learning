@@ -20,7 +20,7 @@ int Configer::init()
     /**************YOLO parameters**************/
     m_yolo_cfg.feed_h = 288;                                       //输入图像的height
     m_yolo_cfg.feed_w = 512;                                       //输入图像的width
-    m_yolo_cfg.cls_num = 3;                                        //类别总数
+    m_yolo_cfg.cls_num = 1;                                        //类别总数
     m_yolo_cfg.model = "/userdata/models/detection.rknn";          //yolov5s rknn模型路经
     /**************YOLO parameters**************/
 
@@ -28,16 +28,16 @@ int Configer::init()
     /**************YOLO parameters2*************/
     m_yolo_cfg2.feed_h = 288;                                       //输入图像的height
     m_yolo_cfg2.feed_w = 512;                                       //输入图像的width
-    m_yolo_cfg2.cls_num = 3;                                        //类别总数
-    m_yolo_cfg2.model = "/userdata/models/detection2.rknn";          //yolov5s rknn模型路经
+    m_yolo_cfg2.cls_num = 2;                                        //类别总数
+    m_yolo_cfg2.model = "/userdata/models/detection2.rknn";         //yolov5s rknn模型路经
     /**************YOLO parameters2*************/
 
 
     /**************UNET parameters**************/
-    m_seg_cfg.feed_h = 416;                                        //输入图像的height
-    m_seg_cfg.feed_w = 512;                                        //输入图像的width
-    m_seg_cfg.cls_num = 2;                                         //类别数，包括背景
-    m_seg_cfg.model = "/userdata/models/segmentation.rknn";              //unetpp rknn模型路径
+    m_seg_cfg.feed_h = 416;                                         //输入图像的height
+    m_seg_cfg.feed_w = 512;                                         //输入图像的width
+    m_seg_cfg.cls_num = 2;                                          //类别数，包括背景
+    m_seg_cfg.model = "/userdata/models/segmentation.rknn";         //unetpp rknn模型路径
     /**************UNET parameters**************/
 
 

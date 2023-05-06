@@ -99,7 +99,7 @@ int test_img(int argc, char **argv)
     cal_time_end("cvtColor");
 
     vector<float *> res;
-    ret = mYolo.run(img.data, res);
+    ret = mYolo.run(img.data, "CHW", res);
     CHECK_EXPR(ret != 0, -1);
 
     mYolo.show_res(img, res);

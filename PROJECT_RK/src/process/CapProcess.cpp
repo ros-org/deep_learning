@@ -92,8 +92,6 @@ void CapProcess::InitPtz()
         g_lLoginHandle = CLIENT_LoginWithHighLevelSecurity(&stInparam, &stOutparam);
         if(0 == g_lLoginHandle)
         {
-            // 根据错误码,可以在 dhnetsdk.h 中找到相应的解释,此处打印的是 16 进制,头文件中是十进制,其中的转换需注意
-            // 例如: #define NET_NOT_SUPPORTED_EC(23) // 当前 SDK 未支持该功能,对应的错误码为 0x80000017, 23 对应的 16 进制为 0x17
             printf("CLIENT_LoginWithHighLevelSecurity %s[%d]Failed!Last Error[%x]\n" ,g_szDevIp ,g_nPort ,CLIENT_GetLastError());
         }
         else
@@ -105,13 +103,13 @@ void CapProcess::InitPtz()
 
             // 设置云台初始化角度
             std::cout<<"第一次初始化转动云台"<<std::endl;
-            // ptzControl(2070, 10);    //1P机器
             // ptzControl(730, 10);     //1P机器
             ptzControl(2470, 10);       //1.5P机器
             sleep(2);
         }
     }
 }
+
 
 // 云台转动控制
 void CapProcess::ptzControl(INPUT const int& horizontalAngle, INPUT const int& verticalAngle)
@@ -171,14 +169,12 @@ void CapProcess::getMsgFromMainThread(INPUT unsigned char& signalValue)
         case 3:
         {
             ptzControl(930, 8192);        // 1.5P机器
-            std::cout<<"ptzControl(930, 8192)"<<std::endl;
             break;
         }
 
         case 4:
         {
             ptzControl(2470, 8192);     // 1.5P机器
-            std::cout<<"ptzControl(2470, 8192)"<<std::endl;
             break;
         }
 
@@ -240,10 +236,9 @@ int CapProcess::start()
     int size;    
     if (m_bdebug == true) 
     {
-        std::cout<<"Read local image...*.jpg"<<std::endl;
-        Mat im_test = cv::imread("/userdata/data/rain.jpg", cv::IMREAD_UNCHANGED); 
-        std::cout<<"Check:离线图像通道数="<<im_test.channels()<<std::endl;
-        // 这不是一个多余操作。防止本地上的图和摄像头获取的图的尺寸不一样，所以额外加一个resize操作
+        Mat im_test = cv::imread("/userdata/data/2.jpg", cv::IMREAD_UNCHANGED); 
+
+        // 这不是一个多余操作。防止离线图和在线图尺寸不一样，加一个resize操作(当尺寸不一致，则将离线图resize到在线图同尺寸)。
         if(m_frame_w == im_test.cols &&  m_frame_h==im_test.rows)
         {
             im_test_cap = im_test;
@@ -251,7 +246,7 @@ int CapProcess::start()
         else
         {
             cv::resize(im_test, im_test_cap, cv::Size(m_frame_w, m_frame_h), (0, 0), (0, 0), cv::INTER_LINEAR);
-            std::cout<<"???????????????离线图片尺寸和相机实时获取的图像尺寸不相等???????????????"<<std::endl;
+            std::cout<<"???????????????离线图片尺寸和相机实时获取的图像尺寸不相等,已设置为实时获取的图像尺寸???????????????"<<std::endl;
         }
         size = im_test_cap.cols * im_test_cap.rows * 3;
     }
@@ -263,7 +258,6 @@ int CapProcess::start()
         if (m_frame.empty()) 
         {
             m_start = false;
-            // return -1;
         }
         total_fram_num++;                                         
         
@@ -272,7 +266,6 @@ int CapProcess::start()
         {
             pthread_mutex_lock(&m_mutex);
             memcpy(m_frame_rcv.data, im_test_cap.data, size);
-            // std::cout<<"将本地的图片写入缓存"<<std::endl;
             m_start = true;
             pthread_mutex_unlock(&m_mutex);
         } 
@@ -284,7 +277,6 @@ int CapProcess::start()
                 pthread_mutex_lock(&m_mutex);
                 memcpy(m_frame_rcv.data, m_frame.data, m_frame_size);
                 m_start = true;
-                // std::cout<<"将摄像头上的图片写入缓存"<<std::endl;
                 pthread_mutex_unlock(&m_mutex);
             }
         }

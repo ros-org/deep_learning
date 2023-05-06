@@ -35,10 +35,10 @@ int ProcessMgr::init()
     m_b_detect = true;                                           // 检测模型(大模型)是否运行标志
     m_b_detect2 = true;                                          // 检测模型(小模型)是否运行标志
     m_b_seg = true;                                              // 分割算法标志
+    m_b_weatherClassification = true;                            // 是否运行天气分类
     m_b_cla = true;                                              // 清洁度分类标志
     minCleannessValue = 10.f;                                    // 清洁度最小值
     maxCleannessValue = 90.f;                                    // 清洁度最大值
-    m_b_weatherClassification = true;                            // 是否运行天气分类
 
     mpConfiger = Configer::GetInstance(); 
 
@@ -94,7 +94,7 @@ int ProcessMgr::init()
         std::cout<<"Loading segementation model..."<<std::endl;
         m_p_seg_cfg = mpConfiger->get_seg_cfg();
         ret = mSeg.init(m_p_seg_cfg);
-        CHECK_EXPR(ret != 0,-1);
+        CHECK_EXPR(ret != 0,-1);                       
     }
 
     if (m_b_weatherClassification) 
@@ -161,16 +161,20 @@ int ProcessMgr::run()
     //检测图，将im_detect_rgb由HWC转CHW 
     uint8_t chwImgDet[3*m_p_yolo_cfg->feed_w*m_p_yolo_cfg->feed_h]; 
     //检测图2，将im_detect_rgb2由HWC转CHW 
-    uint8_t chwImgDet2[3*m_p_yolo_cfg2->feed_w*m_p_yolo_cfg2->feed_h];                       
-    Mat im_detect,im_detect2, im_detect_rgb,im_detect_rgb2;     //用于检测的图
+    uint8_t chwImgDet2[3*m_p_yolo_cfg2->feed_w*m_p_yolo_cfg2->feed_h]; 
+    //用于检测的图                      
+    Mat im_detect,im_detect2, im_detect_resized, im_detect_resized2, im_detect_rgb,im_detect_rgb2;     
     //检测图，将im_seg_rgb由HWC转CHW
     uint8_t chwImgSeg[3*m_p_seg_cfg->feed_w*m_p_seg_cfg->feed_h];
-    Mat im_seg, im_seg_rgb;                                     //用于分割的图
+    Mat im_seg, im_seg_resized, im_seg_rgb;                     //用于分割的图
+    int cla_weather_cnt = 0;                                    //天气分类运行次数
+    int cla_clean_cnt = 0;                                      //清洁度分类运行次数
     int det_cnt = 0;                                            //检测模型运行次数
+    int det_cnt2 = 0;                                           //检测模型2运行次数
     int seg_cnt = 0;                                            //分割模型运行次数
-    int cla_cnt = 0;                                            //分类运行次数
     int inerval_cnt = 1;                                        //预测帧率(从缓冲区拿到的图片中每隔inerval_cnt检测一次)间隔
     int cnt = 0;                                                //从缓冲区真正拿到图的数量
+    int infe_image_num = 0;                                     //用于推理的图像张数
     float angleThresValue = 10.;                                //角度阈值，当角度不小于该值，认为无法通过
     Timer timer;
     int classifyRes = -999;                                     //定义天气分类的类别结果
@@ -179,14 +183,11 @@ int ProcessMgr::run()
     float x,  w;                                                //当前清洁度推理结果类别 所对应的清洁度贡献值、权重
     float cleannessQuaRes;                                      //清洁度量化结果
     Mat seg_res;                                                //分割后的结果图（索引图）
-    char buffer[1024];                                          //用于存储被格式化后的路径等字符串
-    static int debug_seg_cnt = 0;                               //分割模型运行次数，用于日志中             
-    static int debug_det_cnt = 0;                               //检测模型运行次数，用于日志中                                               
+    char buffer[1024];                                          //用于存储被格式化后的路径等字符串                                           
     unsigned char detInfo = 0x00;                               //发送给驱动板的检测(桥架有断裂)消息
     unsigned char segInfo = 0x00;                               //发送给驱动板的分割(角度太大)消息
     unsigned char speedDown = 0x64;                             //发送给驱动板的 要下坡了，请减速
     unsigned char restoreSpeed = 0x65;                          //发送给驱动板的 下坡结束，请恢复到原来的速度
-    bool flag_isRunSegModel = false;                            //是否运行分割模型的标志，检测到桥架框并且无断裂才进行分割;
     bool lastDownhillStatus = false;                            //上次检测到的 是否下桥状态，和最新图的下桥架状态做对比，结果不一致，则发消息并更新状态 
     bool lastfractureStatus = false;                            //上次是否断裂的状态
     bool lastAngleStatus = false;                               //上次角度是否太大的状态
@@ -198,6 +199,8 @@ int ProcessMgr::run()
     bool bSaveOrgImage = true;                                  //是否保存原始图像  
     unsigned char cameraStatus = 0;                             //相机方向状态1,0代表清洗机没有动，不用管相机方向
     unsigned char cameraStatus2 = 0;                            //相机方向状态2
+    vector<float *> res;                                        //存放第一个检测模型的推理结果
+    vector<float *> res2;                                       //存放第一个检测模型的推理结果
 
     while (1) 
     {
@@ -231,11 +234,12 @@ int ProcessMgr::run()
 
         // 主线程发消息到消息线程的CT必须大于消息线程的CT
         beginTime = high_resolution_clock::now();
-        writeMsgToLogfile2("===========================运行次数============================", cnt);
+        writeMsgToLogfile2("===========================运行次数============================", infe_image_num);
+        infe_image_num++;
         
         
         //--------------------------->3、消息交互<---------------------------//
-        //3、1、发消息：主动先发消息给消息线程
+        // 3、1、发消息：主动先发消息给消息线程,切记，发完消息就将相应的值重置为默认值。
         m_uart.getMsgFromMainThread(msgsTomsgThread);
         writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[0]);
         writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[1]);
@@ -244,14 +248,14 @@ int ProcessMgr::run()
         msgsTomsgThread[2] = 254;
         msgsTomsgThread[3] = 254;
         
-        //3.2、收消息：从消息线程获取驱动板发来的消息
+        // 3.2、收消息：从消息线程获取驱动板发来的消息
         m_uart.sendMsgToMainThread(signalFromMsgThread);
         writeMsgToLogfile("从消息线程获取的转头消息", signalFromMsgThread);
         
-        //3.3、发消息：将从消息线程拿到的转头消息发给相机线程
+        // 3.3、发消息：将从消息线程拿到的转头消息发给相机线程
         if(255 != signalFromMsgThread)
         {
-            //3.3.1、捕捉相机的方向状态，当相机状态改变，说明单趟重新开始，则清洁度累积数值清零并重新计算；
+            // 3.3.1、捕捉相机的方向状态，当相机状态改变，说明单趟重新开始，则清洁度累积数值清零并重新计算；
             cameraStatus2 = signalFromMsgThread;
             if(cameraStatus != cameraStatus2)
             {
@@ -261,8 +265,8 @@ int ProcessMgr::run()
             }
             cameraStatus = cameraStatus2;
 
-            //3.3.2、调用相机的对外消息接口，并将该消息写入到相机线程，然后在相机线程中控制云台运动
-            if(cnt%cameraPtzResetFrequence == 0)
+            // 3.3.2、调用相机的对外消息接口，并将该消息写入到相机线程，然后在相机线程中控制云台运动
+            if(infe_image_num % cameraPtzResetFrequence == 0)
             {
                 //强制修改主线程发给相机线程的信息，用于相机定时垂直方向归零
                 if(1 == signalFromMsgThread)
@@ -277,27 +281,31 @@ int ProcessMgr::run()
             m_CapProcess.getMsgFromMainThread(signalFromMsgThread);
             writeMsgToLogfile("将相机方向消息发给相机和图像线程", signalFromMsgThread);
             
-            //3.3.3、相机线程取完方向消息后需要重新置为异常值255
+            // 3.3.3、相机线程取完方向消息后需要重新置为异常值255
             signalFromMsgThread = 255;
             
         }
         //--------------------------->3、消息交互<---------------------------//
 
 
-        //--------------------------->4、天气分类<---------------------------//
         // 注意：将所有天气分为多个类别，可以工作的类别排布在后面（100-199），不可工作的类别排布在前面（0-99）
         //      0(100)-->晴天，1(101)-->下雪，2(102)-->下雨，3(103)-->沙尘暴;
+        //--------------------------->4、天气分类<---------------------------//
+        
         if(m_b_weatherClassification)
         {  
-            std::cout<<"------------------Running weather classification model------------------"<<cnt<<std::endl;  
-            writeMsgToLogfile2("--------------Running weather classification model--------------", cnt);
-            //4.1、图像预处理 
+            std::cout<<"------------------Running weather classification model------------------"<<cla_weather_cnt<<std::endl;  
+            writeMsgToLogfile2("--------------Running weather classification model--------------", cla_weather_cnt);
+            cla_weather_cnt++;
+
+            // 4.1、图像预处理 
             col_center = frame.cols/2;
             row_center = frame.rows/2 + 130;
             im_classify_weather_part = frame(cv::Rect(col_center-240, row_center-112, 480, 224)).clone();
             cv::resize(im_classify_weather_part, im_classify_weather_part_resize, cv::Size(m_p_cla_weather_cfg ->feed_w,m_p_cla_weather_cfg ->feed_h), (0, 0), (0, 0), cv::INTER_LINEAR);
             HWC2CHW(im_classify_weather_part_resize, chwImgWeather);
-            //4.2天气分类推理
+            
+            // 4.2天气分类推理
             int ret = mCla_weather.run(chwImgWeather, "CHW", classifyRes);
             if(0 != ret)
             {
@@ -305,7 +313,7 @@ int ProcessMgr::run()
             }
             CHECK_EXPR(ret != 0,-1);
  
-            //4.3、将天气分类结果写入到日志
+            // 4.3、将天气分类结果写入到日志
             if(0 == classifyRes)
             {
                 writeMsgToLogfile2("天气分类结果:晴天", float(classifyRes));
@@ -323,7 +331,7 @@ int ProcessMgr::run()
                 writeMsgToLogfile2("天气分类结果:沙尘暴", float(classifyRes));
             }
 
-            //4.4、实时发送天气分类结果到消息线程
+            // 4.4、实时发送天气分类结果到消息线程
             msgsTomsgThread[0] = uchar(classifyRes+100);
             writeMsgToLogfile("天气检测发送结果到驱动板:", msgsTomsgThread[0]);                                 
             m_b_weatherClassification = false;    //天气每次上电只需要检测一次
@@ -334,10 +342,11 @@ int ProcessMgr::run()
         //------------------------>5、分类：清洁度检测<-----------------------//
         if(m_b_cla)
         {
-            std::cout<<"--------------------Running cleanliness classification model----------------------"<<cnt<<std::endl;
-            writeMsgToLogfile2("--------------Running cleanliness classification model--------------", cnt);
+            std::cout<<"--------------------Running cleanliness classification model----------------------"<<cla_clean_cnt<<std::endl;
+            writeMsgToLogfile2("--------------Running cleanliness classification model--------------", cla_clean_cnt);
+            cla_clean_cnt++;
             timer.start();
-            //5.1图像预处理
+            // 5.1图像预处理
             col_center = frame.cols/2 + 150;
             row_center = frame.rows/2 + 150;
             im_classify_cleanliness_part = frame(cv::Rect(col_center-112, row_center-112, 224, 224)).clone();
@@ -351,13 +360,15 @@ int ProcessMgr::run()
             }
             CHECK_EXPR(ret != 0,-1);
             timer.end("Cla");
-            //5.3、统计单趟清洁度，清洗机运行一趟时清洁度是实时变化的，当第二趟开始，重新进行计算；
+
+            // 5.3、统计单趟清洁度，清洗机运行一趟时清洁度是实时变化的，当第二趟开始，重新进行计算；
             getCurrentWeight(cleanlinessOutput, x,  w);
             cleanlinessOutputs += x*w;
             cleanlinessOutputs2 += w;
             cleannessQuaRes = cleanlinessOutputs/cleanlinessOutputs2;
             uchar cleannessQuaResPercent = uchar(int(cleannessQuaRes));
-            //5.4、实时发送清洁度到消息线程
+
+            // 5.4、实时发送清洁度到消息线程
             msgsTomsgThread[1] = cleannessQuaResPercent;
             writeMsgToLogfile2("当前清洁度预测类别", float(cleanlinessOutput));
             writeMsgToLogfile2("当前清洁度", int(cleannessQuaRes));
@@ -365,54 +376,48 @@ int ProcessMgr::run()
         //------------------------>5、分类：清洁度检测<-----------------------//
 
 
-        //---------------------------->6、检测<-----------------------------//
+        //---------------------------->6、检测1<----------------------------//
         if (true == m_b_detect) 
         {
-            flag_isRunSegModel = false;
-            writeMsgToLogfile2("--------------->Running object detect model<----------------:", det_cnt);
+            // 6.1、模型运行标志
+            writeMsgToLogfile2("-------------->Running object detect model 1<---------------:", det_cnt);
             det_cnt++;
+            std::cout<<"-------------->Running object detect model 1---------------"<<std::endl;
 
-            timer.start();
-            cv::resize(frame, im_detect, cv::Size(m_p_yolo_cfg->feed_w, m_p_yolo_cfg->feed_h), (0, 0), (0, 0), cv::INTER_LINEAR);
-            cv::cvtColor(im_detect, im_detect_rgb, cv::COLOR_BGR2RGB);
-            HWC2CHW(im_detect_rgb, chwImgDet);
-
-            vector<float *> res;
+            // 6.2、变量设置、初始化等操作
+            m_b_detect2 = false;
             res.clear();
+            
+            // 6.3、图像前处理
+            timer.start();
+            im_detect = frame;
+            cv::resize(im_detect, im_detect_resized, cv::Size(m_p_yolo_cfg->feed_w, m_p_yolo_cfg->feed_h), (0, 0), (0, 0), cv::INTER_LINEAR);
+            cv::cvtColor(im_detect_resized, im_detect_rgb, cv::COLOR_BGR2RGB);
+            HWC2CHW(im_detect_rgb, chwImgDet);
+            
+            // 6.4、模型推理
             int ret = mYolo.run(chwImgDet, "CHW", res);
             CHECK_EXPR(ret != 0,-1);
             timer.end("Detect");
-
-            //----------------------------------第一次检测后的自适应切图---------------------------------//
-            //Do something
-            //调用自适应切图类进行切图
-            
-            //----------------------------------第一次检测后的自适应切图---------------------------------//
-            
-            // 根据最终的检测结果，统计每个类别的数量
-            int bridgeNum = 0;                                             // 当前图片检测出的bridge数量
-            int fractureNum = 0;                                           // 当前图片检测出的fracture数量
-            int lowerBridgeNum = 0;                                        // 当前图片检测出的lowerBridge数，一般应该为0或者1
-            for (int i = 0;i < res.size();i++) 
+                        
+            // 6.5、根据推理输出的结果，统计每个类别([bridge,lowerBridge])目标数
+            int bridgeNum = 0;                                          
+            int lowerBridgeNum = 0;                                     
+            for (int i = 0; i < res.size(); ++i) 
             {
-                if (res[i][5] == 0.)                                       // 0代表bridge，[bridge,fracture,lowerBridge]
+                if (res[i][5] == 0.)                                      
                 {
                     bridgeNum++;
                 }
-
-                if (res[i][5] == 1.)                                       // 1代表fracture
-                {
-                    fractureNum++;
-                }
-
-                if (res[i][5] == 2.)                                       // 2代表lowerBridge，将要下桥架
+                
+                if (res[i][5] == 1.)                                       
                 {
                     lowerBridgeNum++;
                 }
             }
 
-            // 是否将要下桥的状态判断。两次状态不一样则发消息并更新状态;
-            bool latestDownhillStatus = false;                             // 当前最新图 是否将要下桥架的状态，true为将要下桥架;
+            // 6.5、下桥状态判断，前后两次检测状态不一样则发消息并更新状态;
+            bool latestDownhillStatus = false;                             
             if(lowerBridgeNum > 0)
             {
                 latestDownhillStatus = true;
@@ -434,8 +439,94 @@ int ProcessMgr::run()
                 lastDownhillStatus = latestDownhillStatus;
             }
 
-            //是否有断裂 状态判断，两次状态不一致则发消息。这样可以做到 只发一次断裂/无断裂的消息给驱动板
-            bool latestFractureStatus = false;                             // 当前最新图 是否桥架断裂的状态，true为断裂;
+            // 6.6、检测桥架则启动检测模型2，没检测到桥架则将检测模型2和分割都不启动
+            if(bridgeNum>=1)
+            {
+                m_b_detect2 = true;
+                writeMsgToLogfile("检测到有桥架,检测模型2标识符置为true", m_b_detect2);
+            }
+            else
+            {
+                m_b_seg = false;
+            }
+ 
+            // 6.7、保存日志及检测结果图
+            if (m_bdebug == true && det_cnt < 1024)
+            {
+                if (res.size() > 0)               
+                {
+                    mYolo.show_res(im_detect_resized,res);                                                                                                                           //画框并打印检测结果
+                    snprintf(buffer,sizeof(buffer),"/userdata/output/lt_det_out_%d.jpg",det_cnt);
+                    cv::imwrite(buffer,im_detect_resized); 
+                    
+                    for (int i = 0; i < res.size(); ++i) 
+                    {  
+                        snprintf(buffer,sizeof(buffer),"[detect %d] %f %f %f %f %f %f\n",det_cnt,
+                                res[i][0],res[i][1],res[i][2],res[i][3],
+                                res[i][4],res[i][5]);
+                        int size = strlen(buffer);
+                        int nwrite = write(m_debug_fd,buffer,strlen(buffer));
+                        CHECK_EXPR(nwrite != size,-1);
+                    }                                                                                                                                          //保存检测图片
+                }
+            }
+            
+        }
+        //---------------------------->6、检测1<----------------------------//
+ 
+
+
+        //---------------------------->7、检测2<----------------------------//
+        if(m_b_detect2)
+        {
+            // 7.1、模型运行标志
+            writeMsgToLogfile2("-------------->Running object detect model 2<---------------:", det_cnt2);
+            det_cnt2++;
+            std::cout<<"-------------->Running object detect model 2<---------------"<<std::endl;
+
+            // 7.2、变量设置、初始化等操作
+            m_b_seg = false;
+            res2.clear();
+
+            // 7.3、切图：调用自适应切图类进行切图
+            int * a = new int();
+            adaptiveImageCropping imgCrop(frame, res, 1, 288, 512, a);
+            imgCrop.adaptiveCropImage(0, 100, 5,5,288, 512);
+            if(!imgCrop.mDstImage.empty())
+            {
+                im_detect2 = imgCrop.mDstImage;
+                im_seg = imgCrop.mDstImage;
+            }
+            else
+            {
+                writeMsgToLogfile2("adaptiveImageCropping类对象的成员mDstImage为空,请检查...", -1);
+                std::cout<<"adaptiveImageCropping类对象的成员mDstImage为空,请检查..."<<std::endl;
+            }
+            
+            // 7.4、图像前处理
+            timer.start();
+            cv::resize(im_detect2, im_detect_resized2, cv::Size(m_p_yolo_cfg2->feed_w, m_p_yolo_cfg2->feed_h), (0, 0), (0, 0), cv::INTER_LINEAR);
+            cv::cvtColor(im_detect_resized2, im_detect_rgb2, cv::COLOR_BGR2RGB);
+            HWC2CHW(im_detect_rgb2, chwImgDet2);
+
+            // 7.5、模型推理
+            int ret = mYolo2.run(chwImgDet2, "CHW", res2);
+            CHECK_EXPR(ret != 0,-1);
+            timer.end("Detect2");
+
+
+            // 7.6、根据推理输出的结果，统计每个类别([fracture，no fracture])目标数
+            int fractureNum = 0;                                       
+            for (int i = 0;i < res2.size(); ++i) 
+            {
+                if (res2[i][5] == 0.)                                    
+                {
+                    fractureNum++;
+                }
+            }
+
+            // 7.7、是否有断裂 状态判断，两次状态不一致则发消息(这样可以做到 只发一次断裂/无断裂的消息给驱动板）
+            bool latestFractureStatus = false;                          
             if(fractureNum > 0)
             {
                 latestFractureStatus = true;
@@ -456,58 +547,63 @@ int ProcessMgr::run()
                 lastfractureStatus = latestFractureStatus;
             }
 
-            //没检测到断裂且检测到有桥架，分割标识符置为true
-            if(0 == fractureNum && bridgeNum>=1)
+            // 7.8、未检测到断裂则启动分割模型
+            if(0 == fractureNum)
             {
-                flag_isRunSegModel = true;
-                writeMsgToLogfile("没检测到断裂且检测到有桥架,分割标识符置为true", flag_isRunSegModel);
+                m_b_seg = true;
+                writeMsgToLogfile("检测到桥架区域无断裂,将分割模型标识符置为true", m_b_seg);
             }
- 
-            //保存日志及检测结果图
-            if (m_bdebug == true && debug_det_cnt < 1024)
+            
+            // 7.9、保存日志及检测结果图
+            if (m_bdebug == true && det_cnt2 < 1024)
             {
-                for (int i = 0;i < res.size();i++) 
-                {  
-                    snprintf(buffer,sizeof(buffer),"[detect %d] %f %f %f %f %f %f\n",debug_det_cnt,
-                             res[i][0],res[i][1],res[i][2],res[i][3],
-                             res[i][4],res[i][5]);
-                    int size = strlen(buffer);
-                    int nwrite = write(m_debug_fd,buffer,strlen(buffer));
-                    CHECK_EXPR(nwrite != size,-1);
-                }
-                
-                if (res.size() >= 0)               
+                if (res2.size() > 0)               
                 {
-                    mYolo.show_res(im_detect,res);                                                                                                                           //画框并打印检测结果
-                    snprintf(buffer,sizeof(buffer),"/userdata/output/lt_det_out_%d.jpg",debug_det_cnt++);
-                    cv::imwrite(buffer,im_detect);                                                                                                                               //保存检测图片
+                    mYolo2.show_res(im_detect_resized2,res2);                                                                                                                           //画框并打印检测结果
+                    snprintf(buffer,sizeof(buffer),"/userdata/output/lt_det_out2_%d.jpg",det_cnt2);
+                    cv::imwrite(buffer,im_detect_resized2); 
+                    
+                    for (int i = 0;i < res.size();i++) 
+                    {  
+                        snprintf(buffer,sizeof(buffer),"[detect2 %d] %f %f %f %f %f %f\n",det_cnt2,
+                                res2[i][0],res2[i][1],res2[i][2],res2[i][3], res2[i][4],res2[i][5]);
+                        int size = strlen(buffer);
+                        int nwrite = write(m_debug_fd,buffer,strlen(buffer));
+                        CHECK_EXPR(nwrite != size,-1);
+                    }                                                                                                                                            //保存检测图片
                 }
             }
         }
-        //---------------------------->6、检测<-----------------------------//
- 
+        //---------------------------->7、检测2<----------------------------//
 
-        //---------------------------->7、分割<-----------------------------//
-        if (true==m_b_seg && true==flag_isRunSegModel) 
+
+
+        //---------------------------->8、分割<-----------------------------//
+        if (m_b_seg) 
         {
+            // 8.1、模型运行标志
             writeMsgToLogfile2("------------>Running seg model<------------", seg_cnt);
             seg_cnt++;
+            std::cout<<"------------>Running seg model<------------"<<std::endl;
 
+            // 8.2、图像前处理
             timer.start();
-            cv::resize(frame, im_seg, cv::Size(m_p_seg_cfg->feed_w, m_p_seg_cfg->feed_h), 
-                                                        (0, 0), (0, 0), cv::INTER_LINEAR);
-            cv::cvtColor(im_seg, im_seg_rgb, cv::COLOR_BGR2RGB);
+            cv::resize(im_seg, im_seg_resized, cv::Size(m_p_seg_cfg->feed_w, m_p_seg_cfg->feed_h), (0, 0), (0, 0), cv::INTER_LINEAR);
+            cv::cvtColor(im_seg_resized, im_seg_rgb, cv::COLOR_BGR2RGB);
             HWC2CHW(im_seg_rgb, chwImgSeg);
+
+            // 8.3、推理
             int ret = mSeg.run(chwImgSeg, "CHW", seg_res);
             CHECK_EXPR(ret != 0,-1);
             timer.end("Seg");
 
-            //处理分割结果，计算桥架角度
+            // 8.4、分割后处理：计算桥架角度
             float angle = -999.;
             #if 1
             ret = (int)postProcessingSegRes(seg_res,angle);
             writeMsgToLogfile2("分割后计算角度结果", angle);
 
+            // 8.5、根据角度值，给驱动板发消息及状态更新
             bool latestAngleStatus = false;
             if(angle >= angleThresValue)
             {
@@ -530,46 +626,46 @@ int ProcessMgr::run()
             }
             #endif
 
-            //写日志及将分割结果图保存到硬盘上
-            if (m_bdebug == true && debug_seg_cnt < 1024) 
+            // 8.6、写日志及将分割结果图保存到硬盘上
+            if (m_bdebug == true && seg_cnt < 1024) 
             {
-                snprintf(buffer,sizeof(buffer),"[seg %d]angle:%f\n",debug_seg_cnt,angle);
-                cout << buffer;
+                snprintf(buffer,sizeof(buffer),"[seg %d]angle:%f\n",seg_cnt,angle);
                 int size = strlen(buffer);
                 int nwrite = write(m_debug_fd,buffer,strlen(buffer));
                 CHECK_EXPR(nwrite != size,-1);
 
-                Mat im_draw =  Mat::zeros(seg_res.rows, seg_res.cols, CV_8UC3);
-                mSeg.draw_seg(im_draw,seg_res);
-                snprintf(buffer,sizeof(buffer),"/userdata/output/lt_seg_out_%d.jpg",debug_seg_cnt++);
-                cv::imwrite(buffer,im_draw);
+                snprintf(buffer,sizeof(buffer),"/userdata/output/lt_seg_out_%d.jpg",seg_cnt);
+                mSeg.draw_seg(im_seg_resized,seg_res);
+                cv::imwrite(buffer,im_seg_resized);
                 
-                // // 下面这种方法需要的时间更长，但是可以将分割结果图画在原图上
-                // timer.start();
-                // std::vector<std::vector<cv::Point>> seg_res_contour;
-                // std::vector<cv::Vec4i> hreir;
-                // cv::findContours(seg_res, seg_res_contour, hreir, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_NONE,cv::Point());
-                // drawContours(im_seg, seg_res_contour, -1, cv::Scalar(255, 0, 0),1, 8);
-                // snprintf(buffer,sizeof(buffer),"/userdata/output/segMask_%d.jpg",debug_seg_cnt++);
-                // cv::imwrite(buffer,im_seg);
-                // timer.end("BBBBBBBBBBBBBB");
+                // 将分割结果图画在原图上(该方法更耗时)
+                /*
+                timer.start();
+                std::vector<std::vector<cv::Point>> seg_res_contour;
+                std::vector<cv::Vec4i> hreir;
+                cv::findContours(seg_res, seg_res_contour, hreir, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_NONE,cv::Point());
+                drawContours(im_seg, seg_res_contour, -1, cv::Scalar(255, 0, 0),1, 8);
+                snprintf(buffer,sizeof(buffer),"/userdata/output/segMask_%d.jpg",debug_seg_cnt++);
+                cv::imwrite(buffer,im_seg);
+                */
             }
         }
-        //---------------------------->7、分割<-----------------------------//
+        //---------------------------->8、分割<-----------------------------//
 
 
-        //-------------------------->8、阻塞主线程<--------------------------//
         //注意：当主线程比消息线程快的时候，就无法保证上次的消息真正发出去，所以此处要稍微阻塞一下主线程
-        //8、1.计算上次检测总共的时间
+        //-------------------------->9、阻塞主线程<--------------------------//
+        //9、1.计算上次流程的总时间
         endTime = high_resolution_clock::now();      
         timeInterval = std::chrono::duration_cast<milliseconds>(endTime - beginTime);
         std::cout<<"Running time: "<<timeInterval.count()<<"ms"<<std::endl;
-        //8.2、阻塞主线程（当主线程运行一次的时间小于300ms，则阻塞）
+
+        //9.2、阻塞主线程（当主线程运行一次的时间小于300ms，则阻塞）
         if(timeInterval.count()<300000)
         {
             usleep(300000-timeInterval.count());  //注意：usleep单位是微妙
         }
-        //-------------------------->8、阻塞主线程<--------------------------//            
+        //-------------------------->9、阻塞主线程<--------------------------//            
     }
 
     return 0;

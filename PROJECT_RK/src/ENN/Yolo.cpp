@@ -162,12 +162,15 @@ int Yolo::run(unsigned char *p_feed_data, const std::string& imgFmt, vector<floa
 
 void Yolo::show_res(Mat &img,vector<float *> &res)
 {
-    for (int i = 0;i < res.size();i++) 
-    {
-		cv::rectangle(img,Point(res[i][0],res[i][1]),Point(res[i][2],res[i][3]),cv::Scalar(0,0,255),1,1,0);
-	}
-    
-	mDetectionOutput.print_bboxes(res);
+    // if(res.size()>0)
+    // {    
+        for (int i = 0; i < res.size();++i) 
+        {
+            cv::rectangle(img,Point(res[i][0],res[i][1]),Point(res[i][2],res[i][3]),cv::Scalar(0,0,255),1,1,0);
+        }
+        
+        mDetectionOutput.print_bboxes(res);
+    // }
 }
 
 

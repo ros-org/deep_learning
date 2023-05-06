@@ -163,17 +163,17 @@ int adaptiveImageCropping::getTargetCoord(IN const unsigned int& targetLabelCate
     //判空以及判断数据的正确性
     if (0 == mDetRes.size())
     {
-        std::cout << "mDetRes为空，请检查..." << std::endl;
+        std::cout << "mDetRes为空,请检查..." << std::endl;
         return -1;
     }
-    else
-    {
-        if (6 != (sizeof(mDetRes) / mDetRes.size()) / sizeof(mDetRes[0][0]))
-        {
-            std::cout << "mDetRes[0]长度不正确..." << std::endl;
-            return -1;
-        }
-    }
+    // else
+    // {
+    //     if (6 != (sizeof(mDetRes) / mDetRes.size()) / sizeof(mDetRes[0][0]))
+    //     {
+    //         std::cout << "mDetRes[0]长度不正确..." << std::endl;
+    //         return -1;
+    //     }
+    // }
     
     //变量定义及初始化
     float temporaryLength = 0;
@@ -223,23 +223,26 @@ int adaptiveImageCropping::countTargetNum(OUT std::vector<int>& targetsNum)
     //判空
     if (0 == mDetRes.size())
     {
-        std::cout << "mDetRes为空，请检查..." << std::endl;
+        std::cout << "mDetRes为空,请检查..." << std::endl;
         return -1;
     }
-    else
-    {
-        if (6 != (sizeof(mDetRes) / mDetRes.size()) / sizeof(mDetRes[0][0]))
-        {
-            std::cout << "mDetRes[0]长度不正确..." << std::endl;
-            return -1;
-        }
-    }
+    // else
+    // {
+    //     if (6 != (sizeof(mDetRes) / mDetRes.size()) / sizeof(mDetRes[0][0]))
+    //     {
+    //         std::cout << "mDetRes[0]长度不正确..." << std::endl;
+    //         return -1;
+    //     }
+    // }
 
     //输出变量初始化
     targetsNum.clear();
     if (mClsNum > 0)
     {
-        targetsNum.push_back(0);
+        for(int i = 0; i<mClsNum; ++i)
+        {
+            targetsNum.push_back(-999);
+        }        
     }
 
     for (int i = 0; i < mDetRes.size(); ++i)
@@ -288,14 +291,14 @@ int adaptiveImageCropping::adaptiveCropImage(IN const unsigned int& targetLabelC
         std::cout << "mDetRes为空,请检查..." << std::endl;
         return -1;
     }
-    else
-    {
-        if (6 != (sizeof(mDetRes) / mDetRes.size()) / sizeof(mDetRes[0][0]))
-        {
-            std::cout << "mDetRes[0]长度不正确..." << std::endl;
-            return -1;
-        }
-    }
+    // else
+    // {
+    //     if (6 != (sizeof(mDetRes) / mDetRes.size()) / sizeof(mDetRes[0][0]))
+    //     {
+    //         std::cout << "mDetRes[0]长度不正确..." << std::endl;
+    //         return -1;
+    //     }
+    // }
 
     std::vector<float> targetCoord;
     getTargetCoord(targetLabelCategory, thresLength, targetCoord);
@@ -555,8 +558,8 @@ int adaptiveImageCropping::targetCoordUpSampling(IN_OUT std::vector<float>& targ
         return -1;
     }
 
-    float heightRatio = mSrcImage.rows / mInfeHeight;
-    float widthRatio = mSrcImage.cols / mInfeWidth;
+    float heightRatio = float(mSrcImage.rows) / float(mInfeHeight);
+    float widthRatio = float(mSrcImage.cols) / float(mInfeWidth);
     targetCoord[0] = widthRatio * targetCoord[0];
     targetCoord[1] = heightRatio * targetCoord[1];
     targetCoord[2] = widthRatio * targetCoord[2];

@@ -132,25 +132,25 @@ void DetectionOutput::nms_v0(vector<float  *> &pBoxes,vector<float * > &img_finn
 			img_finnal_boxes.push_back(pBoxes[i]);
 		}
 	}
-	//cout << "img_finnal_boxes.size():" << img_finnal_boxes.size() << endl;
 	return;
 }
 
 
 void DetectionOutput::print_bboxes(vector<float *> &boxes)
 {
-    std::cout << "detection_output.cpp: print_bboxes(): img_boxes.size:" << boxes.size() << std::endl;
-	for (int i = 0; i < boxes.size(); i++) 
-	{
-		// cv::rectangle(img,cvPoint(boxes[i][0],boxes[i][1]),cvPoint(boxes[i][2],boxes[i][3]),cv::Scalar(0,0,255),1,1,0);
-		std::cout << boxes[i][0] << " ";
-		std::cout << boxes[i][1] << " ";
-		std::cout << boxes[i][2] << " ";
-		std::cout << boxes[i][3] << " ";
-		std::cout << boxes[i][4] << " ";
-		std::cout << boxes[i][5] << " ";	
-		std::cout << std::endl;
-	}
+	// if(0 != boxes.size())
+	// {
+		for (int i = 0; i < boxes.size(); i++) 
+		{
+			std::cout << boxes[i][0] << " ";
+			std::cout << boxes[i][1] << " ";
+			std::cout << boxes[i][2] << " ";
+			std::cout << boxes[i][3] << " ";
+			std::cout << boxes[i][4] << " ";
+			std::cout << boxes[i][5] << " ";	
+			std::cout << std::endl;
+		}        
+	// }	
 }
 
 

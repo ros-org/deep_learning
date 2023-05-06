@@ -16,6 +16,8 @@
 #include"getCurrentTime.h"
 #include"classify.h"
 #include"version.h"
+#include"imageCropping.h"
+
 
 class ProcessMgr                                                // 定义主线程类 wgn
 {
