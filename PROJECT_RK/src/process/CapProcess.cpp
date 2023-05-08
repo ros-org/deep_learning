@@ -13,7 +13,7 @@ void *CapProcess::start_thread(void *param)
 int CapProcess::init()
 {
     m_start = false;                                                      //当是空图时为false则预测线程也不会取图成功，同时还可以保证每一张图至多被预测线程预测一次;
-    m_bdebug = true;                                                      //控制图片来自本地还是摄像头(true:加载硬盘上的图片检测; false:从摄像头获取图片进行检测) 
+    m_bdebug = true;                                                     //控制图片来自本地还是摄像头(true:加载硬盘上的图片检测; false:从摄像头获取图片进行检测) 
     m_interval = 10;                                                      //帧间隔，摄像头隔m_interval帧向缓存中放图
     total_fram_num = 0;                                                   //总帧数初始化（从摄像头获取到的图的总帧数）
     mainThreadMsg = 255;                                                  //从主线程获取到的云台消息

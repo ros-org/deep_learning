@@ -15,6 +15,8 @@
 //如果一个类内成员变量是static的，但不需要将其设定为常量(const)，那么这个变量声明于头文件内，初始化(定义/实现)写在对应的cpp源文件中;
 int Uart::m_waitFlag = -999;
 
+
+
 // 函数功能：打开串口端口号;
 // ----------------------------------->parameters<----------------------------------
 // inputParas :
@@ -48,6 +50,8 @@ int Uart::open_port_v1(INPUT char *dev_file)
     printf("fd-open=%d\n",fd);
     return fd;
 }
+
+
 
 // 函数功能：设置串口相关参数
 // ----------------------------------->parameters<----------------------------------
@@ -151,6 +155,8 @@ int Uart::set_opt(INPUT const int& fd, INPUT const int& nSpeed, INPUT const int&
     return 0;
 }
 
+
+
 // 函数功能：有参构造。将必须初始化的成员放在构造函数中初始化，将其他参数的初始化放在init()中初始化;
 // ----------------------------------->parameters<----------------------------------
 // inputParas :
@@ -170,6 +176,8 @@ Uart::Uart(INPUT char* portName)
     pthread_mutex_init(&m_uartMutex,NULL);
     pthread_mutex_init(&m_uartMutex2,NULL);
 }
+
+
 
 // 函数功能：析构函数，需要手动释放的资源均需要手动在析构中释放;
 // ----------------------------------->parameters<----------------------------------
@@ -193,6 +201,8 @@ Uart::~Uart()
 
 
 }
+
+
 
 // 函数功能：专门的初始化函数;
 // ----------------------------------->parameters<----------------------------------
@@ -229,6 +239,8 @@ int Uart::init()
     return 0;
 }
 
+
+
 // 函数功能：开启消息线程的入口函数;
 // 注意：静态成员里面不允许使用this指针(this指针只能用于非静态成员函数)，所以才又创建了一个对象，并将其指向this，这样在外面其他对象(假设对象A)调用该函数时，
 //      实际上是用this操作其他数据，就跟直接使用A对象操作数据一样的。
@@ -244,6 +256,8 @@ void *Uart::start_thread(INPUT void *param)
     Uart *uart = (Uart *)param;
     uart->run();
 }
+
+
 
 // 函数功能：将消息发送到主线程(主线程会主动调用该函数，使用共享内存的方式发数据);
 // ----------------------------------->parameters<----------------------------------
@@ -265,6 +279,8 @@ void Uart::sendMsgToMainThread(OUTPUT unsigned char& signalValue)
     pthread_mutex_unlock(&m_uartMutex);
 }
 
+
+
 // 函数功能：将主线程的数据传递到消息线程(主线程会主动调用该函数，使用共享内存的方式);
 // ----------------------------------->parameters<----------------------------------
 // inputParas :
@@ -285,6 +301,8 @@ void Uart::getMsgFromMainThread(INPUT unsigned char* signalValues)
     m_messageFromMainThread[3] = signalValues[3];
     pthread_mutex_unlock(&m_uartMutex2);
 }
+
+
 
 // 函数功能：收发消息。从驱动板收消息存在共享内存中，将主线程发到共享内存的信息发给驱动板;
 // ----------------------------------->parameters<----------------------------------
@@ -332,6 +350,8 @@ int Uart::run()
     
 }
 
+
+
 // 函数功能：校验，将前6字节送入该校验函数，校验当前这包数据是否正常;
 // ----------------------------------->parameters<----------------------------------
 // inputParas :
@@ -357,6 +377,8 @@ unsigned short Uart::ByteCrc16(INPUT unsigned char *buffer, INPUT unsigned short
     return ((crc & 0xFF) << 8 | (crc & 0xFF00) >> 8);
 }
 
+
+
 // 函数功能：校验，将前6字节送入该校验函数，校验当前这包数据是否正常;
 // ----------------------------------->parameters<----------------------------------
 // inputParas :
@@ -373,6 +395,8 @@ int Uart::send_base(INPUT unsigned char *pdata,INPUT const int& len)
 
     return nwrite;
 }
+
+
 
 // 函数功能：发送1字节真正的消息值(该函数会将这1个字节消息按协议组包成一包8字节的数据，然后发送给驱动板);
 // 注意：m_bufferSend的8字节按照协议每一位放对应的内容;
@@ -414,6 +438,8 @@ int Uart::send_to_stm32(INPUT unsigned char *pdata, INPUT const int& len)
     return 0;
 }
 
+
+
 // 函数功能：从串口获取驱动板发来的8字节数据,将获取到的数据进行变换并校验其正确性;
 // ----------------------------------->parameters<----------------------------------
 // inputParas :
@@ -439,6 +465,8 @@ int Uart::receive_from_stm32(OUTPUT unsigned char *pdata,INPUT const int& len)
     return -1;
 }
 
+
+
 // 函数功能：从串口获取驱动板发来的8字节数据;
 // ----------------------------------->parameters<----------------------------------
 // inputParas :
@@ -456,6 +484,8 @@ int Uart::receive_base(unsigned char *pdata,int len)
     return nread;
 }
 
+
+
 // 函数功能：static函数.如该驱动板要发消息过来，会有一个通知信号。将该函数(以函数指针的方式，由于信号参数的类型原因，导致该函数只能是类的static函数)与信号绑定，
 //         一收到信号该函数就会执行。m_waitFlag一置为0,其他函数就会去串口读消息;
 // ----------------------------------->parameters<----------------------------------
@@ -467,7 +497,7 @@ int Uart::receive_base(unsigned char *pdata,int len)
 // ----------------------------------->parameters<----------------------------------
 void Uart::signal_handler_IO (INPUT int status)  
 {  
-    printf ("-------------------------------------------signal_handler_IO：将要收到驱动版发来的消息-----------------------------------------.\n");  
+    printf ("-------------------------------------------signal_handler_IO:将要收到驱动版发来的消息-----------------------------------------.\n");  
     m_waitFlag = 0;  
 }  
 

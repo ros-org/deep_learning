@@ -40,12 +40,6 @@ int ProcessMgr::init()
     minCleannessValue = 10.f;                                    // 清洁度最小值
     maxCleannessValue = 90.f;                                    // 清洁度最大值
 
-    mpConfiger = Configer::GetInstance(); 
-
-    ret = m_CapProcess.init();                                   // 在该函数中开启了获取图像的线程
-    CHECK_EXPR(ret != 0,-1);
-
-    m_uart.init();
     if (m_bdebug == true) 
     {
         m_debug_fd = open("/userdata/output/debug.txt",O_RDWR | O_TRUNC | O_CREAT);
@@ -56,11 +50,29 @@ int ProcessMgr::init()
         int nwrite = write(m_debug_fd,data,strlen(data));
         CHECK_EXPR(nwrite != size,-1);
     } 
-
     char visionFrameVersion[32];
     getVisionFrameVersion(visionFrameVersion);  
     writeMsgToLogfile("当前视觉框架版本号:",visionFrameVersion); 
 
+    mpConfiger = Configer::GetInstance(); 
+
+    ret = m_CapProcess.init();                                   // 启动图像线程：在该函数中开启了获取图像的线程
+    if(0 != ret)
+    {
+        std::cout<<"相机线程启动失败,请检查..."<<std::endl;
+        writeMsgToLogfile2("相机线程启动失败,请检查...", ret);
+    }
+    CHECK_EXPR(ret != 0,-1);
+
+    ret = m_uart.init();                                               // 启动消息线程
+    if(0 != ret)
+    {
+        std::cout<<"消息线程启动失败,请检查..."<<std::endl;
+        writeMsgToLogfile2("消息线程启动失败,请检查...", ret);
+    }
+    CHECK_EXPR(ret != 0,-1);
+
+    m_p_yolo_cfg = mpConfiger->get_yolo_cfg();
     if (m_b_detect) 
     {   
         char detectionModelVersion[32]; 
@@ -68,11 +80,21 @@ int ProcessMgr::init()
         writeMsgToLogfile("检测模型1版本号:",detectionModelVersion); 
 
         std::cout<<"Loading detection model..."<<std::endl;
-        m_p_yolo_cfg = mpConfiger->get_yolo_cfg();
         ret = mYolo.init(m_p_yolo_cfg);
+        if(0 != ret)
+        {
+            std::cout<<"检测模型1初始化失败,请检查..."<<std::endl;
+            writeMsgToLogfile2("检测模型1初始化失败,请检查...", ret);
+        }
+        else
+        {
+            std::cout<<"检测模型1初始化成功!"<<std::endl;
+            writeMsgToLogfile2("检测模型1初始化成功!", ret);
+        }
         CHECK_EXPR(ret != 0,-1);
     }
 
+    m_p_yolo_cfg2 = mpConfiger->get_yolo_cfg2();
     if (m_b_detect2) 
     {   
         char detection2ModelVersion[32]; 
@@ -80,11 +102,21 @@ int ProcessMgr::init()
         writeMsgToLogfile("检测模型2版本号:",detection2ModelVersion); 
 
         std::cout<<"Loading detection2 model..."<<std::endl;
-        m_p_yolo_cfg2 = mpConfiger->get_yolo_cfg2();
         ret = mYolo2.init(m_p_yolo_cfg2);
+        if(0 != ret)
+        {
+            std::cout<<"检测模型2初始化失败,请检查..."<<std::endl;
+            writeMsgToLogfile2("检测模型2初始化失败,请检查...", ret);
+        }
+        else
+        {
+            std::cout<<"检测模型2初始化成功!"<<std::endl;
+            writeMsgToLogfile2("检测模型2初始化成功!", ret);
+        }
         CHECK_EXPR(ret != 0,-1);
     }
 
+    m_p_seg_cfg = mpConfiger->get_seg_cfg();
     if (m_b_seg) 
     {
         char segmentationMdelVersion[32];
@@ -92,11 +124,21 @@ int ProcessMgr::init()
         writeMsgToLogfile("分割模型版本号:", segmentationMdelVersion);
 
         std::cout<<"Loading segementation model..."<<std::endl;
-        m_p_seg_cfg = mpConfiger->get_seg_cfg();
         ret = mSeg.init(m_p_seg_cfg);
+        if(0 != ret)
+        {
+            std::cout<<"分割模型初始化失败,请检查..."<<std::endl;
+            writeMsgToLogfile2("分割模型初始化失败,请检查...", ret);
+        }
+        else
+        {
+            std::cout<<"分割模型初始化成功!"<<std::endl;
+            writeMsgToLogfile2("分割模型初始化成功!", ret);
+        }
         CHECK_EXPR(ret != 0,-1);                       
     }
 
+    m_p_cla_weather_cfg = mpConfiger->get_cla_weather_cfg();
     if (m_b_weatherClassification) 
     {
         char weatherModelVersion[32];
@@ -104,11 +146,21 @@ int ProcessMgr::init()
         writeMsgToLogfile("天气模型版本号:", weatherModelVersion);
 
         std::cout<<"Loading weather classification model..."<<std::endl;
-        m_p_cla_weather_cfg = mpConfiger->get_cla_weather_cfg();
         ret = mCla_weather.init(m_p_cla_weather_cfg);
+        if(0 != ret)
+        {
+            std::cout<<"天气分类模型初始化失败,请检查..."<<std::endl;
+            writeMsgToLogfile2("天气分类模型初始化失败,请检查...", ret);
+        }
+        else
+        {
+            std::cout<<"天气分类模型初始化成功!"<<std::endl;
+            writeMsgToLogfile2("天气分类模型初始化成功!", ret);
+        }
         CHECK_EXPR(ret != 0,-1);
     }
 
+    m_p_cla_cfg = mpConfiger->get_cla_cfg();
     if (m_b_cla) 
     {
         char cleannessModelVersion[32];
@@ -116,12 +168,21 @@ int ProcessMgr::init()
         writeMsgToLogfile("清洁度模型版本号:", cleannessModelVersion);
 
         std::cout<<"Loading cleanness classification model..."<<std::endl;
-        m_p_cla_cfg = mpConfiger->get_cla_cfg();
         ret = mCla.init(m_p_cla_cfg);
-
-        //清洁度量化初始化
-        getCleannessQuaWeights(m_p_cla_cfg->cls_num);
+        if(0 != ret)
+        {
+            std::cout<<"清洁度模型初始化失败,请检查..."<<std::endl;
+            writeMsgToLogfile2("清洁度模型初始化失败,请检查...", ret);
+        }
+        else
+        {
+            std::cout<<"清洁度模型初始化成功!"<<std::endl;
+            writeMsgToLogfile2("清洁度模型初始化成功!", ret);
+        }
         CHECK_EXPR(ret != 0,-1);
+
+        //清洁度量化参数初始化(根据类别数生成每个类别的清洁度贡献值和权重)
+        getCleannessQuaWeights(m_p_cla_cfg->cls_num);
     }
 
     return 0;
@@ -298,6 +359,7 @@ int ProcessMgr::run()
             writeMsgToLogfile2("--------------Running weather classification model--------------", cla_weather_cnt);
             cla_weather_cnt++;
 
+            timer.start();
             // 4.1、图像预处理 
             col_center = frame.cols/2;
             row_center = frame.rows/2 + 130;
@@ -309,9 +371,16 @@ int ProcessMgr::run()
             int ret = mCla_weather.run(chwImgWeather, "CHW", classifyRes);
             if(0 != ret)
             {
-                writeMsgToLogfile2("天气推理结果异常...", -1);
+                std::cout<<"天气模型推理异常,请检查..."<<std::endl;
+                writeMsgToLogfile2("天气模型推理异常,请检查...", ret);
+            }
+            else
+            {
+                std::cout<<"天气模型推理成功!"<<std::endl;
+                writeMsgToLogfile2("天气模型推理成功!", ret);
             }
             CHECK_EXPR(ret != 0,-1);
+            timer.end("Cla_weather");
  
             // 4.3、将天气分类结果写入到日志
             if(0 == classifyRes)
@@ -346,20 +415,28 @@ int ProcessMgr::run()
             writeMsgToLogfile2("--------------Running cleanliness classification model--------------", cla_clean_cnt);
             cla_clean_cnt++;
             timer.start();
+
             // 5.1图像预处理
             col_center = frame.cols/2 + 150;
             row_center = frame.rows/2 + 150;
             im_classify_cleanliness_part = frame(cv::Rect(col_center-112, row_center-112, 224, 224)).clone();
             cv::resize(im_classify_cleanliness_part, im_classify_cleanliness_part_resize, cv::Size(m_p_cla_cfg->feed_w, m_p_cla_cfg->feed_h), (0, 0), (0, 0), cv::INTER_LINEAR);
             HWC2CHW(im_classify_cleanliness_part_resize, chwImgCleanness);
+
             //5.2清洁度分类推理
             int ret = mCla.run(chwImgCleanness, "CHW", cleanlinessOutput);
             if(0 != ret)
             {
-                writeMsgToLogfile2("清洁度推理结果异常...", -1);
+                std::cout<<"清洁度模型推理异常,请检查..."<<std::endl;
+                writeMsgToLogfile2("清洁度模型推理异常,请检查...", ret);
+            }
+            else
+            {
+                std::cout<<"清洁度模型推理成功!"<<std::endl;
+                writeMsgToLogfile2("清洁度模型推理成功!", ret);
             }
             CHECK_EXPR(ret != 0,-1);
-            timer.end("Cla");
+            timer.end("Cla_cleanliness");
 
             // 5.3、统计单趟清洁度，清洗机运行一趟时清洁度是实时变化的，当第二趟开始，重新进行计算；
             getCurrentWeight(cleanlinessOutput, x,  w);
@@ -397,8 +474,18 @@ int ProcessMgr::run()
             
             // 6.4、模型推理
             int ret = mYolo.run(chwImgDet, "CHW", res);
+            if(0 != ret)
+            {
+                std::cout<<"检测模型1推理异常,请检查..."<<std::endl;
+                writeMsgToLogfile2("检测模型1推理异常,请检查...", ret);
+            }
+            else
+            {
+                std::cout<<"检测模型1推理成功!"<<std::endl;
+                writeMsgToLogfile2("检测模型1推理成功!", ret);
+            }
             CHECK_EXPR(ret != 0,-1);
-            timer.end("Detect");
+            timer.end("Detect1");
                         
             // 6.5、根据推理输出的结果，统计每个类别([bridge,lowerBridge])目标数
             int bridgeNum = 0;                                          
@@ -511,9 +598,18 @@ int ProcessMgr::run()
 
             // 7.5、模型推理
             int ret = mYolo2.run(chwImgDet2, "CHW", res2);
+            if(0 != ret)
+            {
+                std::cout<<"检测模型2推理异常,请检查..."<<std::endl;
+                writeMsgToLogfile2("检测模型2推理异常,请检查...", ret);
+            }
+            else
+            {
+                std::cout<<"检测模型2推理成功!"<<std::endl;
+                writeMsgToLogfile2("检测模型2推理成功!", ret);
+            }
             CHECK_EXPR(ret != 0,-1);
             timer.end("Detect2");
-
 
             // 7.6、根据推理输出的结果，统计每个类别([fracture，no fracture])目标数
             int fractureNum = 0;                                       
@@ -594,6 +690,16 @@ int ProcessMgr::run()
 
             // 8.3、推理
             int ret = mSeg.run(chwImgSeg, "CHW", seg_res);
+            if(0 != ret)
+            {
+                std::cout<<"分割模型推理异常,请检查..."<<std::endl;
+                writeMsgToLogfile2("分割模型推理异常,请检查...", ret);
+            }
+            else
+            {
+                std::cout<<"分割模型推理成功!"<<std::endl;
+                writeMsgToLogfile2("分割模型推理成功!", ret);
+            }
             CHECK_EXPR(ret != 0,-1);
             timer.end("Seg");
 
