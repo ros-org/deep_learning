@@ -56,14 +56,6 @@ int ProcessMgr::init()
 
     mpConfiger = Configer::GetInstance(); 
 
-    ret = m_CapProcess.init();                                   // 启动图像线程：在该函数中开启了获取图像的线程
-    if(0 != ret)
-    {
-        std::cout<<"相机线程启动失败,请检查..."<<std::endl;
-        writeMsgToLogfile2("相机线程启动失败,请检查...", ret);
-    }
-    CHECK_EXPR(ret != 0,-1);
-
     ret = m_uart.init();                                               // 启动消息线程
     if(0 != ret)
     {
@@ -184,6 +176,15 @@ int ProcessMgr::init()
         //清洁度量化参数初始化(根据类别数生成每个类别的清洁度贡献值和权重)
         getCleannessQuaWeights(m_p_cla_cfg->cls_num);
     }
+
+    // 启动图像线程：在该函数中开启了获取图像的线程
+    ret = m_CapProcess.init();                                   
+    if(0 != ret)
+    {
+        std::cout<<"相机线程启动失败,请检查..."<<std::endl;
+        writeMsgToLogfile2("相机线程启动失败,请检查...", ret);
+    }
+    CHECK_EXPR(ret != 0,-1);
 
     return 0;
 }
@@ -312,7 +313,7 @@ int ProcessMgr::run()
         // 3.2、收消息：从消息线程获取驱动板发来的消息
         m_uart.sendMsgToMainThread(signalFromMsgThread);
         writeMsgToLogfile("从消息线程获取的转头消息", signalFromMsgThread);
-        
+
         // 3.3、发消息：将从消息线程拿到的转头消息发给相机线程
         if(255 != signalFromMsgThread)
         {
@@ -529,15 +530,34 @@ int ProcessMgr::run()
             // 6.6、检测桥架则启动检测模型2，没检测到桥架则将检测模型2和分割都不启动
             if(bridgeNum>=1)
             {
-                m_b_detect2 = true;
-                writeMsgToLogfile("检测到有桥架,检测模型2标识符置为true", m_b_detect2);
+                writeMsgToLogfile("模型1检测到有桥架,准备切图!", m_b_detect2);
+                std::cout<<"模型1检测到有桥架,准备切图!"<<std::endl;
+
+                // 6.7、切图：调用自适应切图类进行切图
+                int * a = new int();
+                adaptiveImageCropping imgCrop(frame, res, 1, 288, 512, a);
+                imgCrop.adaptiveCropImage(0, 100, 5,5,288, 512);
+                if(!imgCrop.mDstImage.empty())
+                {
+                    m_b_detect2 = true;
+                    im_detect2 = imgCrop.mDstImage;
+                    im_seg = imgCrop.mDstImage;
+                    writeMsgToLogfile("切到用于检测2的图像!", m_b_detect2);
+                    std::cout<<"切到用于检测2的图像!"<<std::endl;
+                }
+                else
+                {
+                    m_b_seg = false;
+                    writeMsgToLogfile("未切到用于检测2的图像!", m_b_detect2);
+                    std::cout<<"未切到用于检测2的图像"<<std::endl;
+                }
             }
             else
             {
                 m_b_seg = false;
             }
  
-            // 6.7、保存日志及检测结果图
+            // 6.8、保存日志及检测结果图
             if (m_bdebug == true && det_cnt < 1024)
             {
                 if (res.size() > 0)               
@@ -564,7 +584,7 @@ int ProcessMgr::run()
 
 
         //---------------------------->7、检测2<----------------------------//
-        if(m_b_detect2)
+        if(m_b_detect && m_b_detect2)
         {
             // 7.1、模型运行标志
             writeMsgToLogfile2("-------------->Running object detect model 2<---------------:", det_cnt2);
@@ -574,29 +594,14 @@ int ProcessMgr::run()
             // 7.2、变量设置、初始化等操作
             m_b_seg = false;
             res2.clear();
-
-            // 7.3、切图：调用自适应切图类进行切图
-            int * a = new int();
-            adaptiveImageCropping imgCrop(frame, res, 1, 288, 512, a);
-            imgCrop.adaptiveCropImage(0, 100, 5,5,288, 512);
-            if(!imgCrop.mDstImage.empty())
-            {
-                im_detect2 = imgCrop.mDstImage;
-                im_seg = imgCrop.mDstImage;
-            }
-            else
-            {
-                writeMsgToLogfile2("adaptiveImageCropping类对象的成员mDstImage为空,请检查...", -1);
-                std::cout<<"adaptiveImageCropping类对象的成员mDstImage为空,请检查..."<<std::endl;
-            }
             
-            // 7.4、图像前处理
+            // 7.3、图像前处理
             timer.start();
             cv::resize(im_detect2, im_detect_resized2, cv::Size(m_p_yolo_cfg2->feed_w, m_p_yolo_cfg2->feed_h), (0, 0), (0, 0), cv::INTER_LINEAR);
             cv::cvtColor(im_detect_resized2, im_detect_rgb2, cv::COLOR_BGR2RGB);
             HWC2CHW(im_detect_rgb2, chwImgDet2);
 
-            // 7.5、模型推理
+            // 7.4、模型推理
             int ret = mYolo2.run(chwImgDet2, "CHW", res2);
             if(0 != ret)
             {
@@ -611,7 +616,7 @@ int ProcessMgr::run()
             CHECK_EXPR(ret != 0,-1);
             timer.end("Detect2");
 
-            // 7.6、根据推理输出的结果，统计每个类别([fracture，no fracture])目标数
+            // 7.5、根据推理输出的结果，统计每个类别([fracture，no fracture])目标数
             int fractureNum = 0;                                       
             for (int i = 0;i < res2.size(); ++i) 
             {
@@ -621,7 +626,7 @@ int ProcessMgr::run()
                 }
             }
 
-            // 7.7、是否有断裂 状态判断，两次状态不一致则发消息(这样可以做到 只发一次断裂/无断裂的消息给驱动板）
+            // 7.6、是否有断裂 状态判断，两次状态不一致则发消息(这样可以做到 只发一次断裂/无断裂的消息给驱动板）
             bool latestFractureStatus = false;                          
             if(fractureNum > 0)
             {
@@ -643,14 +648,14 @@ int ProcessMgr::run()
                 lastfractureStatus = latestFractureStatus;
             }
 
-            // 7.8、未检测到断裂则启动分割模型
+            // 7.7、未检测到断裂则启动分割模型
             if(0 == fractureNum)
             {
                 m_b_seg = true;
                 writeMsgToLogfile("检测到桥架区域无断裂,将分割模型标识符置为true", m_b_seg);
             }
             
-            // 7.9、保存日志及检测结果图
+            // 7.8、保存日志及检测结果图
             if (m_bdebug == true && det_cnt2 < 1024)
             {
                 if (res2.size() > 0)               
@@ -675,7 +680,7 @@ int ProcessMgr::run()
 
 
         //---------------------------->8、分割<-----------------------------//
-        if (m_b_seg) 
+        if (m_b_detect && m_b_detect2 && m_b_seg) 
         {
             // 8.1、模型运行标志
             writeMsgToLogfile2("------------>Running seg model<------------", seg_cnt);
