@@ -5,7 +5,7 @@
 // 视觉框架版本号
 int getVisionFrameVersion(OUT char version[32])
 {
-    const char* visionFrame = "v1.0.5";
+    const char* visionFrame = "v1.0.6";
     memcpy(version, visionFrame, 32);
     return 0;
 }

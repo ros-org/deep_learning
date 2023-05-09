@@ -103,9 +103,9 @@ void CapProcess::InitPtz()
 
             // 设置云台初始化角度
             std::cout<<"第一次初始化转动云台"<<std::endl;
-            ptzControl(930, 10);     //1P机器
-            // ptzControl(2470, 10);       //1.5P机器
-            sleep(2);    //不要删除，防止转头动作还没执行完
+            // ptzControl(930, 10);     // 1P机器
+            ptzControl(2470, 10);       // 1.5P机器
+            sleep(2);                   // 不要删除，防止转头动作还没执行完
         }
     }
 }
@@ -222,7 +222,8 @@ int CapProcess::start()
     if (m_frame.empty()) 
     {
         m_start = false;
-        std::cout<<"请检查相机是否连接正确！"<<std::endl;
+        std::cout<<"相机线程退出,请检查相机是否连接正确..."<<std::endl;
+        // Grap this error and write to log file
         return -1;
     }
     m_frame_h = m_frame.rows;
@@ -252,14 +253,16 @@ int CapProcess::start()
     }
 
 
-    while (m_frame.empty() == false)
+    while (true)
     {
         m_captrue >> m_frame;                 
         if (m_frame.empty()) 
         {
             m_start = false;
+            std::cout<<"CapProcess.cpp:260:获取到空图----------------------------"<<std::endl;
+            continue;
         }
-        total_fram_num++;                                         
+        total_fram_num++;                                        
         
         //将离线图写入缓存
         if (m_bdebug == true) 
@@ -281,7 +284,7 @@ int CapProcess::start()
             }
         }
     }
-
+    
     return 0;
 }
 
