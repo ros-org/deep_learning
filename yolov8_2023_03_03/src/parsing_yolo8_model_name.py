@@ -29,7 +29,7 @@ def parsing_name(yolo8_folder):
     Returns:
         info (dict)：一个字典，其中包含了 model_name,  conf 和 iou 三个 key。
     """
-    # Path.resolve 用于返回绝对路径，并去掉 ~ 和 .. 等相对路径
+    # Path.expanduser().resolve() 用于返回绝对路径，并去掉 ~ 和 .. 等相对路径
     model_path = pathlib.Path(yolo8_folder).expanduser().resolve()
     model_found = 0
     info = None
