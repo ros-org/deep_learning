@@ -478,11 +478,12 @@ int adaptiveImageCropping::dilationTargetCoord(IN const unsigned int& offsetHeig
         return -1;
     }
 
-    if (targetCoord[0] < 0)
-    {
-        std::cout << "输入的目标坐标数据异常，请检查..." << std::endl;
-        return -1;
-    }
+    // if (targetCoord[0] < 0)
+    // {
+    //     std::cout<<targetCoord[0]<<std::endl;
+    //     std::cout << "输入的目标坐标数据异常，请检查..." << std::endl;
+    //     return -1;
+    // }
 
     //计算目标扩大几个像素后的目标
     if (targetCoord[0] - offsetWidth >= 0)
@@ -552,11 +553,12 @@ int adaptiveImageCropping::targetCoordUpSampling(IN_OUT std::vector<float>& targ
         return -1;
     }
 
-    if (targetCoord[0] < 0)
-    {
-        std::cout << "输入的目标坐标数据异常，请检查..." << std::endl;
-        return -1;
-    }
+    // if (targetCoord[0] < 0)
+    // {
+    //     std::cout<<targetCoord[0]<<std::endl;
+    //     std::cout << "输入的目标坐标数据异常，请检查..." << std::endl;
+    //     return -1;
+    // }
 
     float heightRatio = float(mSrcImage.rows) / float(mInfeHeight);
     float widthRatio = float(mSrcImage.cols) / float(mInfeWidth);

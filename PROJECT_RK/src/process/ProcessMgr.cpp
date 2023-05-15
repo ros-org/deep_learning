@@ -7,7 +7,7 @@
 #include <chrono>     //用于测试时间，该方式更精准
 
 //相机云台归零频率
-#define cameraPtzResetFrequence 100    
+#define cameraPtzResetFrequence 200    
 
 using std::chrono::high_resolution_clock;
 using std::chrono::milliseconds;
@@ -32,11 +32,11 @@ int ProcessMgr::init()
     char* portName = "/dev/ttyS3";                               // RKNN 烧写系统后 dev下的端口号，没有 ttyS3 说明系统有问题，
     m_uart = Uart(portName);                                     // 通信端口号，
     m_bdebug = true;                                             // 调试模式标志(true则会写日志和保存部分结果图)
-    m_b_detect = true;                                           // 检测模型(大模型)是否运行标志
-    m_b_detect2 = true;                                          // 检测模型(小模型)是否运行标志
-    m_b_seg = true;                                              // 分割算法标志
-    m_b_weatherClassification = true;                            // 是否运行天气分类
-    m_b_cla = true;                                              // 清洁度分类标志
+    m_b_detect = false;                                           // 检测模型(大模型)是否运行标志
+    m_b_detect2 = false;                                          // 检测模型(小模型)是否运行标志，该模型不能关，切记
+    m_b_seg = false;                                              // 分割算法标志,改模型不能关，切记
+    m_b_weatherClassification = true;                           // 是否运行天气分类
+    m_b_cla = true;                                             // 清洁度分类标志
     minCleannessValue = 10.f;                                    // 清洁度最小值
     maxCleannessValue = 90.f;                                    // 清洁度最大值
 
@@ -174,7 +174,7 @@ int ProcessMgr::init()
         CHECK_EXPR(ret != 0,-1);
 
         //清洁度量化参数初始化(根据类别数生成每个类别的清洁度贡献值和权重)
-        getCleannessQuaWeights(m_p_cla_cfg->cls_num);
+        getCleannessQuaWeights(m_p_cla_cfg->cls_num-1);
     }
 
     // 启动图像线程：在该函数中开启了获取图像的线程
@@ -353,7 +353,6 @@ int ProcessMgr::run()
         // 注意：将所有天气分为多个类别，可以工作的类别排布在后面（100-199），不可工作的类别排布在前面（0-99）
         //      0(100)-->晴天，1(101)-->下雪，2(102)-->下雨，3(103)-->沙尘暴;
         //--------------------------->4、天气分类<---------------------------//
-        
         if(m_b_weatherClassification)
         {  
             std::cout<<"------------------Running weather classification model------------------"<<cla_weather_cnt<<std::endl;  
@@ -364,7 +363,7 @@ int ProcessMgr::run()
             // 4.1、图像预处理 
             col_center = frame.cols/2;
             row_center = frame.rows/2 + 130;
-            im_classify_weather_part = frame(cv::Rect(col_center-240, row_center-112, 480, 224)).clone();
+            im_classify_weather_part = frame(cv::Rect(col_center-m_p_cla_weather_cfg ->feed_w/2, row_center-m_p_cla_weather_cfg ->feed_h/2, m_p_cla_weather_cfg ->feed_w, m_p_cla_weather_cfg ->feed_h)).clone();
             cv::resize(im_classify_weather_part, im_classify_weather_part_resize, cv::Size(m_p_cla_weather_cfg ->feed_w,m_p_cla_weather_cfg ->feed_h), (0, 0), (0, 0), cv::INTER_LINEAR);
             HWC2CHW(im_classify_weather_part_resize, chwImgWeather);
             
@@ -418,9 +417,9 @@ int ProcessMgr::run()
             timer.start();
 
             // 5.1图像预处理
-            col_center = frame.cols/2 + 150;
+            col_center = frame.cols/2;
             row_center = frame.rows/2 + 150;
-            im_classify_cleanliness_part = frame(cv::Rect(col_center-112, row_center-112, 224, 224)).clone();
+            im_classify_cleanliness_part = frame(cv::Rect(col_center-m_p_cla_cfg->feed_w/2, row_center-m_p_cla_cfg->feed_h/2, m_p_cla_cfg->feed_w, m_p_cla_cfg->feed_h)).clone();
             cv::resize(im_classify_cleanliness_part, im_classify_cleanliness_part_resize, cv::Size(m_p_cla_cfg->feed_w, m_p_cla_cfg->feed_h), (0, 0), (0, 0), cv::INTER_LINEAR);
             HWC2CHW(im_classify_cleanliness_part_resize, chwImgCleanness);
 
@@ -438,18 +437,25 @@ int ProcessMgr::run()
             }
             CHECK_EXPR(ret != 0,-1);
             timer.end("Cla_cleanliness");
+            
+            if(cleanlinessOutput < m_p_cla_cfg->cls_num-1)
+            {
+                // 5.3、统计单趟清洁度，清洗机运行一趟时清洁度是实时变化的，当第二趟开始，重新进行计算；
+                getCurrentWeight(cleanlinessOutput, x,  w);
+                cleanlinessOutputs += x*w;
+                cleanlinessOutputs2 += w;
+                cleannessQuaRes = cleanlinessOutputs/cleanlinessOutputs2;
 
-            // 5.3、统计单趟清洁度，清洗机运行一趟时清洁度是实时变化的，当第二趟开始，重新进行计算；
-            getCurrentWeight(cleanlinessOutput, x,  w);
-            cleanlinessOutputs += x*w;
-            cleanlinessOutputs2 += w;
-            cleannessQuaRes = cleanlinessOutputs/cleanlinessOutputs2;
-            uchar cleannessQuaResPercent = uchar(int(cleannessQuaRes));
-
-            // 5.4、实时发送清洁度到消息线程
-            msgsTomsgThread[1] = cleannessQuaResPercent;
+                // 5.4、实时发送清洁度到消息线程
+                msgsTomsgThread[1] = uchar(int(cleannessQuaRes));
+                writeMsgToLogfile2("当前清洁度", int(cleannessQuaRes));
+            }  
+            else
+            {
+                msgsTomsgThread[1] = 255;
+                writeMsgToLogfile2("当前图片异常，清洁度不进行统计", int(cleannessQuaRes));
+            }
             writeMsgToLogfile2("当前清洁度预测类别", float(cleanlinessOutput));
-            writeMsgToLogfile2("当前清洁度", int(cleannessQuaRes));
         }
         //------------------------>5、分类：清洁度检测<-----------------------//
 
@@ -535,8 +541,8 @@ int ProcessMgr::run()
 
                 // 6.7、切图：调用自适应切图类进行切图
                 int * a = new int();
-                adaptiveImageCropping imgCrop(frame, res, 1, 288, 512, a);
-                imgCrop.adaptiveCropImage(0, 100, 5,5,288, 512);
+                adaptiveImageCropping imgCrop(frame, res, 1, m_p_yolo_cfg->feed_h, m_p_yolo_cfg->feed_w, a);
+                imgCrop.adaptiveCropImage(0, 20, 5,5,m_p_yolo_cfg2->feed_h, m_p_yolo_cfg2->feed_w);
                 if(!imgCrop.mDstImage.empty())
                 {
                     m_b_detect2 = true;

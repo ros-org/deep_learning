@@ -48,7 +48,9 @@ void weatherModelOfflineTest()
     {
         std::cout<<"当前图片路径:"<<imgNamesPath[imgNumIdx]<<std::endl;
         frame = imread(imgNamesPath[imgNumIdx],cv::IMREAD_UNCHANGED);
-        im_classify_weather_part = frame(cv::Rect(col_center-240, row_center-112, 480, 224));
+        std::cout<<"图像尺寸为:"<<frame.cols<<" "<<frame.rows<<",请检查是否要进行resize<"<<std::endl;
+        cv::resize(frame, frame, cv::Size(1280, 720), (0, 0), (0, 0), cv::INTER_LINEAR);
+        im_classify_weather_part = frame(cv::Rect(col_center-m_p_cla_weather_cfg->feed_w/2, row_center-m_p_cla_weather_cfg->feed_h/2, m_p_cla_weather_cfg->feed_w, m_p_cla_weather_cfg->feed_h)).clone();
         cv::resize(im_classify_weather_part, im_classify_weather, cv::Size(m_p_cla_weather_cfg ->feed_w,m_p_cla_weather_cfg ->feed_h), (0, 0), (0, 0), cv::INTER_LINEAR);
         
         int classifyRes;
@@ -60,6 +62,47 @@ void weatherModelOfflineTest()
 }
 
 
+void cleanlinessModelOfflineTest()
+{
+    //模型初始化
+    Configer *pConfiger = Configer::GetInstance();
+    std::cout << "version:" << pConfiger->verison() << std::endl;
+
+    std::cout<<"Loading cleanliness model..."<<std::endl;
+    CLA_CFG_t* m_p_cla_cleanliness_cfg;
+    m_p_cla_cleanliness_cfg = pConfiger->get_cla_cfg();
+    Classify mCla_cleanliness;
+    int ret = mCla_cleanliness.init(m_p_cla_cleanliness_cfg);
+
+
+    //图像预处理 
+    int col_center;
+    int row_center;
+    cv::Mat frame2, frame,im_classify_cleanliness_part, im_classify_cleanliness;
+    std::string imgDir = "/userdata/data/";
+    std::vector<String> imgNamesPath;
+    glob(imgDir, imgNamesPath, false);  //调用opncv中的glob函数，将遍历路径path，将该路径下的全部文件名的绝对路径存进imgNmaes
+
+    for(int imgNumIdx=0; imgNumIdx<imgNamesPath.size(); ++imgNumIdx)
+    {
+        std::cout<<"当前图片路径:"<<imgNamesPath[imgNumIdx]<<std::endl;
+        frame = imread(imgNamesPath[imgNumIdx],cv::IMREAD_UNCHANGED);
+        std::cout<<"图像尺寸为:"<<frame.cols<<" "<<frame.rows<<",请检查是否要进行resize"<<std::endl;
+        // cv::resize(frame, frame, cv::Size(1280, 720), (0, 0), (0, 0), cv::INTER_LINEAR);
+        col_center = frame.cols/2;
+        row_center = frame.rows/2 + 150;
+        im_classify_cleanliness_part = frame(cv::Rect(col_center-m_p_cla_cleanliness_cfg->feed_w/2, row_center-m_p_cla_cleanliness_cfg->feed_h/2, m_p_cla_cleanliness_cfg->feed_w, m_p_cla_cleanliness_cfg->feed_h)).clone();
+        cv::resize(im_classify_cleanliness_part, im_classify_cleanliness, cv::Size(m_p_cla_cleanliness_cfg ->feed_w,m_p_cla_cleanliness_cfg ->feed_h), (0, 0), (0, 0), cv::INTER_LINEAR);
+        
+        int classifyRes;
+        uint8_t chwImg[3*m_p_cla_cleanliness_cfg ->feed_w*m_p_cla_cleanliness_cfg ->feed_h];
+        HWC2CHW(im_classify_cleanliness, chwImg);
+        int ret = mCla_cleanliness.run(chwImg, "CHW", classifyRes);
+        std::cout<<"推理结果="<<classifyRes<<std::endl;
+    }
+
+    
+}
 
 int test_img(int argc, char **argv)
 {
@@ -110,16 +153,17 @@ int test_img(int argc, char **argv)
 
 
 //天气模型离线批量测试
-int main888()
+int main()
 {
     weatherModelOfflineTest();
+    // cleanlinessModelOfflineTest();
     std::cout<<"测试结束."<<std::endl;
 }
 
 
 
 //清洗机视觉框架运行
-int main(int argc, char **argv)
+int main888(int argc, char **argv)
 {
 #if 1
     // 由于C语言pthread_create函数的原因，导致在C语言中启动线程的方式看着很难受（不直接优雅美观）

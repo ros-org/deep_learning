@@ -70,6 +70,7 @@ public:
     }
 
 
+    // 清洁度参数
     CLA_CFG_t * get_cla_cfg()
     {
         return &m_cla_cfg;       // 返回分类模型的配置参数

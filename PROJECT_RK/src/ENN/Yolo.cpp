@@ -161,16 +161,39 @@ int Yolo::run(unsigned char *p_feed_data, const std::string& imgFmt, vector<floa
 }
 
 void Yolo::show_res(Mat &img,vector<float *> &res)
-{
-    // if(res.size()>0)
-    // {    
-        for (int i = 0; i < res.size();++i) 
+{    
+    double rGrayValue[2]={120, 255};
+    double gGrayValue[2]={0, 255};
+    double bGrayValue[2]={0, 255};
+    for (int i = 0; i < res.size();++i) 
+    {
+        if(0 == res[i][5])
         {
             cv::rectangle(img,Point(res[i][0],res[i][1]),Point(res[i][2],res[i][3]),cv::Scalar(0,0,255),1,1,0);
         }
-        
-        mDetectionOutput.print_bboxes(res);
-    // }
+        else if(1 == res[i][5])
+        {
+            cv::rectangle(img,Point(res[i][0],res[i][1]),Point(res[i][2],res[i][3]),cv::Scalar(0,255,0),1,1,0);
+        }
+        else if(2 == res[i][5])
+        {
+            cv::rectangle(img,Point(res[i][0],res[i][1]),Point(res[i][2],res[i][3]),cv::Scalar(255,0,0),1,1,0);
+        }
+        else if(3 == res[i][5])
+        {
+            cv::rectangle(img,Point(res[i][0],res[i][1]),Point(res[i][2],res[i][3]),cv::Scalar(255,255,0),1,1,0);
+        }
+        else if(4 == res[i][5])
+        {
+            cv::rectangle(img,Point(res[i][0],res[i][1]),Point(res[i][2],res[i][3]),cv::Scalar(255,0,255),1,1,0);
+        }
+        else
+        {
+            cv::rectangle(img,Point(res[i][0],res[i][1]),Point(res[i][2],res[i][3]),cv::Scalar(0,255,255),1,1,0);
+        } 
+    }
+    
+    mDetectionOutput.print_bboxes(res);
 }
 
 

@@ -13,7 +13,7 @@ void *CapProcess::start_thread(void *param)
 int CapProcess::init()
 {
     m_start = false;                                                      //当是空图时为false则预测线程也不会取图成功，同时还可以保证每一张图至多被预测线程预测一次;
-    m_bdebug = false;                                                     //控制图片来自本地还是摄像头(true:加载硬盘上的图片检测; false:从摄像头获取图片进行检测) 
+    m_bdebug = true;                                                      //控制图片来自本地还是摄像头(true:加载硬盘上的图片检测; false:从摄像头获取图片进行检测) 
     m_interval = 10;                                                      //帧间隔，摄像头隔m_interval帧向缓存中放图
     total_fram_num = 0;                                                   //总帧数初始化（从摄像头获取到的图的总帧数）
     mainThreadMsg = 255;                                                  //从主线程获取到的云台消息
@@ -103,8 +103,9 @@ void CapProcess::InitPtz()
 
             // 设置云台初始化角度
             std::cout<<"第一次初始化转动云台"<<std::endl;
-            // ptzControl(930, 10);     // 1P机器
-            ptzControl(2470, 10);       // 1.5P机器
+            ptzControl(730, 10);     // 1P机器
+            // ptzControl(2070, 10);     // 1P机器
+            // ptzControl(2470, 10);       // 1.5P机器
             sleep(2);                   // 不要删除，防止转头动作还没执行完
         }
     }
@@ -153,16 +154,16 @@ void CapProcess::getMsgFromMainThread(INPUT unsigned char& signalValue)
         case 1:
         {
             //转云台(往左)
-            // ptzControl(730, 10);     // 1P机器
-            ptzControl(930, 10);        // 1.5P机器
+            ptzControl(730, 10);     // 1P机器
+            // ptzControl(930, 10);        // 1.5P机器
             break;         
         }
 
         case 2:
         {
             //转云台(往右)
-            // ptzControl(2070, 10);    // 1P机器
-            ptzControl(2470, 10);       // 1.5P机器
+            ptzControl(2070, 10);    // 1P机器
+            // ptzControl(2470, 10);       // 1.5P机器
             break;
         }
 
@@ -237,7 +238,7 @@ int CapProcess::start()
     int size;    
     if (m_bdebug == true) 
     {
-        Mat im_test = cv::imread("/userdata/data/2.jpg", cv::IMREAD_UNCHANGED); 
+        Mat im_test = cv::imread("/userdata/data/raoyang_rain_2.jpg", cv::IMREAD_UNCHANGED); 
 
         // 这不是一个多余操作。防止离线图和在线图尺寸不一样，加一个resize操作(当尺寸不一致，则将离线图resize到在线图同尺寸)。
         if(m_frame_w == im_test.cols &&  m_frame_h==im_test.rows)
@@ -284,7 +285,7 @@ int CapProcess::start()
             }
         }
     }
-    
+
     return 0;
 }
 

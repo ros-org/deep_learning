@@ -51,8 +51,8 @@ int Configer::init()
     
     /*************RESNET parameters*************/
     m_cla_cfg.feed_h = 224;
-    m_cla_cfg.feed_w = 224;
-    m_cla_cfg.cls_num = 2;
+    m_cla_cfg.feed_w = 480;
+    m_cla_cfg.cls_num = 4;
     m_cla_cfg.model = "/userdata/models/clealiness.rknn";          // 清洁度分类模型文件
     /*************RESNET parameters*************/
     return 0;

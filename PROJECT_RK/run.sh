@@ -27,12 +27,12 @@ adb push build/bin/main /userdata                                               
 # adb shell "mkdir -p /userdata/output"                                            # output文件夹是用来存放日志相关的文件的
 # adb shell "mkdir -p /userdata/models"                                            # -p是防止该文件夹已存在
 # adb push models/weather.rknn /userdata/models/                                   # 将天气分类模型push到models文件夹下
-# adb push models/clealiness.rknn /userdata/models/                                # 将清洁度分类模型push到models文件夹下
+# adb push models/clealiness.rknn /userdata/models/                                  # 将清洁度分类模型push到models文件夹下
 # adb push models/detection.rknn /userdata/models/                                 # 将检测模型push到models文件夹下
 # adb push models/detection2.rknn /userdata/models/                                # 将检测模型2 push到models文件夹下
 # adb push models/segmentation.rknn /userdata/models/                              # 将分割模型push到models文件夹下
 # adb shell "mkdir -p /userdata/data"                                              # 在开发板上创建data文件夹
-adb push data/2.jpg /userdata/data/                                                # 在data文件夹中push一张测试图用于离线测试
+adb push data/*.jpg /userdata/data/                                            # 在data文件夹中push一张测试图用于离线测试
 # ------------------------------------》创建一个文件夹并将模型文件push到开发板《------------------------------------- #
 
 
