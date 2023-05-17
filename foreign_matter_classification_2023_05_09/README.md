@@ -8,13 +8,13 @@
 
 ##### 已经使用的图片数量和尝试的异物类型如下：
 
-![image-20230517094020657](/home/drin/.config/Typora/typora-user-images/image-20230517094020657.png)
+![image-20230517094020657](/home/drin/work/upload_to_github/foreign_matter_classification_2023_05_09/assets/image-20230517094020657.png)
 
 ##### 目前效果：
 
-![image-20230517094215109](/home/drin/.config/Typora/typora-user-images/image-20230517094215109.png)  
+![image-20230517094215109](/home/drin/work/upload_to_github/foreign_matter_classification_2023_05_09/assets/image-20230517094215109.png)  
 
-![image-20230517094305909](/home/drin/.config/Typora/typora-user-images/image-20230517094305909.png) 
+![image-20230517094305909](/home/drin/work/upload_to_github/foreign_matter_classification_2023_05_09/assets/image-20230517094305909.png) 
 
 ##### 后续动作：
 
