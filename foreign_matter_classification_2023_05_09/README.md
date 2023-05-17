@@ -4,17 +4,17 @@
 
 #### 2023-05-17 更新：
 
-目前已搭建 RegNet 模型并进行了修改，建立了数据集分割程序，学习率搜索等程序，初步实现了光伏板的异物分类。
+目前已搭建 RegNet 模型并进行了修改，建立了数据集分割程序，学习率搜索等程序，初步实现了光伏板上的异物分类。
 
 ##### 已经使用的图片数量和尝试的异物类型如下：
 
-![image-20230517094020657](/home/drin/work/upload_to_github/foreign_matter_classification_2023_05_09/assets/image-20230517094020657.png)
+![image-20230517104344395](./assets/image-20230517104344395.png)
 
 ##### 目前效果：
 
-![image-20230517094215109](/home/drin/work/upload_to_github/foreign_matter_classification_2023_05_09/assets/image-20230517094215109.png)  
+![image-20230517104635331](./assets/image-20230517104635331.png)  
 
-![image-20230517094305909](/home/drin/work/upload_to_github/foreign_matter_classification_2023_05_09/assets/image-20230517094305909.png) 
+ ![image-20230517104709112](./assets/image-20230517104709112.png)
 
 ##### 后续动作：
 
