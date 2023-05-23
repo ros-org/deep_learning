@@ -10,10 +10,12 @@
 日期： 2023-05-11
 作者： jun.liu@leapting.com
 """
+import os
 import pathlib
 import shutil
 
 import numpy as np
+from tqdm import tqdm
 
 
 def copy_one_image(each, processed, copied, tally,
@@ -23,13 +25,14 @@ def copy_one_image(each, processed, copied, tally,
     if processed <= train_quantity:
         shutil.copy(each, train_dir_classified)  # 尝试改为 copy
         copied += 1
-    elif processed == train_quantity + validation_quantity:
+    elif processed <= train_quantity + validation_quantity:
         shutil.copy(each, validation_dir_classified)
         copied += 1
-    elif processed == train_quantity + validation_quantity + test_quantity:
+    elif processed <= train_quantity + validation_quantity + test_quantity:
         shutil.copy(each, test_dir_classified)
         copied += 1
-        processed = 0  # 注意必须在 processed = 5 时归零，重新累计。
+        if processed == train_quantity + validation_quantity + test_quantity:
+            processed = 0  # 注意必须在 processed = 5 时归零，重新累计。
     tally += 1  # 计算处理过的数量。
     return processed, copied, tally
 
@@ -39,8 +42,8 @@ def split_dataset(image_path, class_type, ratio=(3, 1, 1)):
 
     Arguments:
         image_path (str): 一个字符串，指向一个文件夹，其中放着图片文件。字符串中必须包含 foreign_matter
-            或 OK 文件夹，即类别文件夹的名字。后面会检查 class_type 是否和 image_path 的类别文件夹一致。
-            在文件夹中，允许包含子文件夹，会扫描子文件夹内的图片，并且会把子文件夹的图片也并分配到 3 个数据集
+            或 OK 文件夹，即类别文件夹的名字。会检查 class_type 是否和 image_path 的类别文件夹一致。
+            在文件夹中，应该包含子文件夹，会扫描子文件夹内的图片，并且会把子文件夹的图片也并分配到 3 个数据集
             中去。但是不会处理“孙文件夹”（即如果子文件夹 foo 中再包含下一级子文件夹 bar，则子文件夹 bar 会
             被忽略，不再扫描 bar 中的图片）。
         class_type (str): 一个字符串，是 'OK' 或 'foreign_matter'，表示分类的类别。
@@ -87,14 +90,18 @@ def split_dataset(image_path, class_type, ratio=(3, 1, 1)):
     processed = 0
     tally = 0
     copied = 0
-    for each in sorted(image_path.iterdir()):  # iterdir 默认是乱序的，所以要用 sorted 。
-        if each.is_dir():
-            for one_image in each.iterdir():
+    tqdm_image_path = image_path.iterdir()
+    for each in sorted(tqdm_image_path):  # iterdir 默认是乱序的，所以要用 sorted 。
+        # 有子文件夹时，应该对子文件夹内的图片再次排序。 img_quantity 是图片数量，用 walrus 表达式得到。
+        if each.is_dir() and ((img_quantity := len(os.listdir(each))) > 0):
+            tqdm_each_dir = tqdm(each.iterdir(),
+                                 total=img_quantity, ncols=80)
+            for one_image in sorted(tqdm_each_dir):
                 processed, copied, tally = copy_one_image(
                     one_image, processed, copied, tally,
                     train_quantity, validation_quantity, test_quantity,
                     train_dir_classified, validation_dir_classified, test_dir_classified)
-        elif each.is_file():  # 忽略文件夹。
+        elif each.is_file():  # TODO： 后续考虑去掉这部分，即要求图片划分到子文件夹后，才把它们分配到数据集中。
             processed, copied, tally = copy_one_image(
                 each, processed, copied, tally,
                 train_quantity, validation_quantity, test_quantity,
@@ -106,8 +113,17 @@ def split_dataset(image_path, class_type, ratio=(3, 1, 1)):
     print('Done!')
 
 
-if __name__ == '__main__':
+def main():
+    """对异物文件夹和无异物 2 个文件夹，把其中图片分成 3 个数据集。"""
+    print('Processing folder: "foreign_matter"')
     image_path = r'~/work/cv/2023_05_04_regnet/classification_data/original_data/foreign_matter/'
-    # image_path = r'~/work/cv/2023_05_04_regnet/classification_data/original_data/OK/'
     split_dataset(image_path, class_type='foreign_matter')
+
+    print('Processing folder: "OK"')
+    image_path = r'~/work/cv/2023_05_04_regnet/classification_data/original_data/OK/'
+    split_dataset(image_path, class_type='OK')
+
+
+if __name__ == '__main__':
+    main()
 
