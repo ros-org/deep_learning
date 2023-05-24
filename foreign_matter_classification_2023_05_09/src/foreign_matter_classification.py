@@ -261,7 +261,7 @@ def load_image_worker(one_image_path):
 
 @utilities.timer
 def prediction(model_path, image_folder, task='prediction', save_incorrect_results=False,
-               batch_size=1, overwrite_results=True):
+               batch_size=1, overwrite_results=True, imgsz=640):
     """使用 RegNet 模型，对文件夹 :image_folder:`image_folder` 内图片进行预测。也可以使用测试集，计算模型的准确度。
 
     Arguments:
@@ -359,7 +359,7 @@ def prediction(model_path, image_folder, task='prediction', save_incorrect_resul
                     # pil_image 的大小必须和模型要求的输入保持一致。
                     # 设置 antialias=True 是为了避免错误信息的提示。
                     pil_image = torchvision.transforms.Resize(
-                        (300, 300), antialias=True)(pil_image)
+                        (imgsz, imgsz), antialias=True)(pil_image)
                     pil_image = pil_image[None, ...]  # 预测时，需要输入 4D 张量
 
                     # 2. 如果前处理之后再把图片移到 GPU 上，则前处理的时间约为 26ms。
@@ -420,21 +420,21 @@ def show_dataset(dataset, quantity=3):
                 break
 
 
-def get_data(data_root=None, batch_size=8, get_class_id_only=False):
+def get_data(data_root=None, batch_size=8, get_class_id_only=False, imgsz=None):
     if data_root is None:
         data_root = pathlib.Path(r'dataset_demo').expanduser().resolve()
     data_root = pathlib.Path(data_root).expanduser().resolve()
     # root = r'/home/leapting/work/cv/2023_05_06_datasets/kaggle_train_test'
 
-    test_data = get_dataset(data_root, dataset_type='test')
+    test_data = get_dataset(data_root, dataset_type='test', imgsz=imgsz)
     test_dataloader = DataLoader(test_data, batch_size=batch_size)
     print(f'Classes: {test_data.classes}')
 
     if get_class_id_only:
         output = test_data.classes
     else:
-        training_data = get_dataset(data_root, dataset_type='train')
-        validation_data = get_dataset(data_root, dataset_type='validation')
+        training_data = get_dataset(data_root, dataset_type='train', imgsz=imgsz)
+        validation_data = get_dataset(data_root, dataset_type='validation', imgsz=imgsz)
         # Create data loaders.
         # 因为自定义的光伏板数据集是固定放在 2 个文件夹，加载时必须打乱顺序，避免
         # 前一半全是 A 类别，后一半全是 B 类别的情况。如果不打乱，会使得前面几轮
@@ -451,7 +451,7 @@ def get_data(data_root=None, batch_size=8, get_class_id_only=False):
     return output
 
 
-def get_dataset(root: pathlib.Path, dataset_type=None):
+def get_dataset(root: pathlib.Path, dataset_type=None, imgsz=640):
     # root = pathlib.Path(root)
     if dataset_type is not None:
         dataset_path = root / dataset_type  # dataset_type 是 'train'，'test' 等
@@ -462,7 +462,7 @@ def get_dataset(root: pathlib.Path, dataset_type=None):
     if dataset_type == 'train':
         # 训练数据需要做数据增加，因此使用 ColorJitter 等。
         image_transform = transforms.Compose([
-            transforms.Resize((300, 300)),  # 图片改为 300x300 大小
+            transforms.Resize((imgsz, imgsz)),  # 图片改为 640x640 大小
             transforms.ToTensor(),
             # ColorJitter 是否需要在 ToTensor 之前？
             transforms.ColorJitter(brightness=0.5, contrast=0.5,
@@ -473,7 +473,7 @@ def get_dataset(root: pathlib.Path, dataset_type=None):
         ])
     else:
         image_transform = transforms.Compose([
-            transforms.Resize((300, 300)),
+            transforms.Resize((imgsz, imgsz)),
             transforms.ToTensor(),
         ])
 
@@ -491,6 +491,7 @@ def get_dataset(root: pathlib.Path, dataset_type=None):
 
 @utilities.timer
 def main(data_root, lr=1.1e-2, batch_size=8, epochs=5, classes=2,
+         imgsz=640,
          optimizer_name='SGD', momentum=0.9,
          step=10,
          checkpoint_path=None, save_model=True):
@@ -520,7 +521,7 @@ def main(data_root, lr=1.1e-2, batch_size=8, epochs=5, classes=2,
     # 时间格式 '20230512_1016'，前半部分为日期，后半部分为小时和分钟
     time_suffix = time.strftime('%Y%m%d_%H%M')
     experiment_name = f'{time_suffix}_{dataset_size}_{optimizer_name}_lr{lr:.2e}_b{batch_size}' \
-                      f'_e{epochs}_step{step}_jitter_hue0.4'  # \_m{momentum}_nesterov
+                      f'_e{epochs}_step{step}_hue0.4_imgsz{imgsz}'  # \_m{momentum}_nesterov
     # f'degrees{degrees}_nbs{nbs}_close_mosaic{close_mosaic}_'
     model_name = f'{experiment_name}.pt'
     highest_accuracy_path = checkpoint_path / model_name
@@ -541,7 +542,8 @@ def main(data_root, lr=1.1e-2, batch_size=8, epochs=5, classes=2,
     # print(model)
 
     # Create data loaders.
-    train_dataloader, validation_dataloader, test_dataloader = get_data(data_root, batch_size)
+    train_dataloader, validation_dataloader, test_dataloader = get_data(
+        data_root, batch_size, imgsz=imgsz)
 
     # dubug 时可以查看样本和标签的形状。
     # for X, y in test_dataloader:
@@ -590,17 +592,19 @@ if __name__ == '__main__':
     # 训练模型
     data_root = '~/work/cv/2023_05_04_regnet/classification_data'
     main(data_root=data_root,
-         lr=5e-3, batch_size=8,
-         epochs=25, step=10)
+         lr=1.1e-2, batch_size=4,
+         imgsz=640,
+         epochs=1, step=2)
 
     # 测试准确度
     #  RegNet_20230523_1058_testacc_989 20230523_1341_3k_SGD_lr1.10e-02_b8_e15_step10_testacc_985
     #  20230523_1553_3k_SGD_lr5.00e-03_b8_e12_step10_jitter_testacc_989
-    # # image_folder = r'~/work/cv/2023_05_04_regnet/classification_data'  random_test
+    # # image_folder = r'~/work/cv/2023_05_04_regnet/classification_data'
 
+    # 20230523_1958_4k_SGD_lr5.00e-03_b8_e25_step10_jitter_hue0.4_testacc_995
     # model_path = r'checkpoints/' \
-    #              r'20230523_1823_3k_SGD_lr5.00e-03_b8_e12_step10_jitter_hue0.4_testacc_976.pt'
-    # image_folder = r'~/work/cv/2023_05_04_regnet/tryout/spam'
+    #              r'20230523_1958_4k_SGD_lr5.00e-03_b8_e25_step10_jitter_hue0.4_testacc_995.pt'
+    # image_folder = r'~/work/cv/2023_05_04_regnet/tryout/random_test'
     # prediction(model_path=model_path, image_folder=image_folder,
     #            task='test_accuracy',
     #            save_incorrect_results=True,
