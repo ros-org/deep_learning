@@ -1,10 +1,10 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""该模块用于训练一个 RegNet 模型，对光伏板进行分类。主要区分光伏板上有异物和
+"""该模块用于训练一个 RegNet 模型，然后对光伏板进行分类预测。主要区分光伏板上有异物和
 没有异物两种情况。
 
-版本号： 0.3
-日期： 2023-05-17
+版本号： 0.4
+日期： 2023-05-24
 作者： jun.liu@leapting.com
 """
 import concurrent
@@ -15,7 +15,6 @@ import time
 import unicodedata
 
 import cv2 as cv
-import graphviz
 import numpy as np
 import torch
 import torchview
@@ -274,6 +273,8 @@ def prediction(model_path, image_folder, task='prediction', save_incorrect_resul
             结果一起保存下来。
         batch_size (int): 一个整数，是批量的大小。
         overwrite_results (bool): 布尔值。如果为 True，则会在训练过程中，把验证集准确度最高的模型保存下来。
+        imgsz (int): 一个整数，是图片缩放后的大小，即图片会被缩放到这个大小的高度和宽度，然后进行预测。这个参数
+            必须和训练时的保持一致，否则预测会出错。模型 .pt 文件的名字会包含 imgsz 信息，可以根据模型名字设置其大小。
     """
     if task not in ['prediction', 'test_accuracy']:
         raise ValueError(f'Only "prediction, test_accuracy" are valid now for task, but {task=} now.')
@@ -302,7 +303,7 @@ def prediction(model_path, image_folder, task='prediction', save_incorrect_resul
 
     if task == 'test_accuracy':
         # 预测时不要设置 dataset_type
-        dataset = get_dataset(image_folder, dataset_type='test')
+        dataset = get_dataset(image_folder, dataset_type='test', imgsz=imgsz)
         # Create data loaders.
         dataloader = DataLoader(dataset, batch_size=batch_size)
 
@@ -393,7 +394,6 @@ def prediction(model_path, image_folder, task='prediction', save_incorrect_resul
                     # 记录这个时间点 t_circle_end
                     t_circle_end = time.perf_counter()
 
-
         if images_quantity > 0:  # 文件夹内有图片时才计算处理时间。
             average_load_image = 1000 * tally_load_image / images_quantity
             average_preprocess = 1000 * tally_preprocess / images_quantity
@@ -451,7 +451,7 @@ def get_data(data_root=None, batch_size=8, get_class_id_only=False, imgsz=None):
     return output
 
 
-def get_dataset(root: pathlib.Path, dataset_type=None, imgsz=640):
+def get_dataset(root: pathlib.Path, dataset_type=None, imgsz=None):
     # root = pathlib.Path(root)
     if dataset_type is not None:
         dataset_path = root / dataset_type  # dataset_type 是 'train'，'test' 等
@@ -462,7 +462,7 @@ def get_dataset(root: pathlib.Path, dataset_type=None, imgsz=640):
     if dataset_type == 'train':
         # 训练数据需要做数据增加，因此使用 ColorJitter 等。
         image_transform = transforms.Compose([
-            transforms.Resize((imgsz, imgsz)),  # 图片改为 640x640 大小
+            transforms.Resize((imgsz, imgsz)),  # 图片改为 imgsz x imgsz 大小
             transforms.ToTensor(),
             # ColorJitter 是否需要在 ToTensor 之前？
             transforms.ColorJitter(brightness=0.5, contrast=0.5,
@@ -503,6 +503,7 @@ def main(data_root, lr=1.1e-2, batch_size=8, epochs=5, classes=2,
         batch_size (int): 一个整数，是批量的大小。
         epochs (int): 一个整数，是训练的迭代次数。
         classes (int): 一个整数，是模型需要区分的类别数量。目前为 2 类，即只区分有异物和无异物。
+        imgsz (int): 一个整数，是图片缩放后的大小，即图片会被缩放到这个大小的高度和宽度，然后进行训练。
         optimizer_name (str): 一个字符串，是 'SGD' 或 'Adam'，表示使用的优化器名字。
         checkpoint_path (str): 一个字符串，指向一个文件夹，训练好的最佳模型将存放在此路径中。
         save_model (bool): 布尔值。如果为 True，则会在训练过程中，把验证集准确度最高的模型保存下来。
@@ -534,7 +535,7 @@ def main(data_root, lr=1.1e-2, batch_size=8, epochs=5, classes=2,
     highest_accuracy = 0  # 记录最高准确度，据此保存模型。
 
     # {momentum=}
-    print(f'{lr=:.2e}, {batch_size=}, {epochs=}, {optimizer_name=}, {step=}')
+    print(f'{lr=:.2e}, {batch_size=}, {optimizer_name=}, {imgsz=}, \n{epochs=}, {step=}')
 
     # input_shape = (3, 32, 32)
     # size = np.prod(input_shape)
@@ -574,12 +575,14 @@ def main(data_root, lr=1.1e-2, batch_size=8, epochs=5, classes=2,
                 highest_accuracy=highest_accuracy)
 
     best_model = torch.load(highest_accuracy_path)
+    validation_accuracy, _ = test(validation_dataloader, best_model, loss_fn, dataset_type='test')
     test_accuracy, _ = test(test_dataloader, best_model, loss_fn, dataset_type='test')
-    print(f"Best test accuracy: {test_accuracy:.1%}")
+    print(f"Best accuracy: \tvalidation: {validation_accuracy:.1%}, test: {test_accuracy:.1%}")
     if save_model:
         # 加上测试集准确度之后再保存一次模型。
         add_accuracy = highest_accuracy_path.parent / (
-                highest_accuracy_path.stem + f'_testacc_{test_accuracy * 1000:.0f}.pt')
+                highest_accuracy_path.stem +
+                f'_val{validation_accuracy * 1000:.0f}_test{test_accuracy * 1000:.0f}.pt')
         highest_accuracy_path.rename(add_accuracy)
         print(f'Best model is saved as: {add_accuracy}\n')
 
@@ -592,9 +595,9 @@ if __name__ == '__main__':
     # 训练模型
     data_root = '~/work/cv/2023_05_04_regnet/classification_data'
     main(data_root=data_root,
-         lr=1.1e-2, batch_size=4,
+         lr=5e-3, batch_size=2,  # 1.1e-2
          imgsz=640,
-         epochs=1, step=2)
+         epochs=27, step=8)
 
     # 测试准确度
     #  RegNet_20230523_1058_testacc_989 20230523_1341_3k_SGD_lr1.10e-02_b8_e15_step10_testacc_985
@@ -603,10 +606,10 @@ if __name__ == '__main__':
 
     # 20230523_1958_4k_SGD_lr5.00e-03_b8_e25_step10_jitter_hue0.4_testacc_995
     # model_path = r'checkpoints/' \
-    #              r'20230523_1958_4k_SGD_lr5.00e-03_b8_e25_step10_jitter_hue0.4_testacc_995.pt'
+    #              r'20230523_2312_4k_SGD_lr1.10e-02_b8_e125_step30_hue0.4_imgsz300_val987_test996.pt'
     # image_folder = r'~/work/cv/2023_05_04_regnet/tryout/random_test'
     # prediction(model_path=model_path, image_folder=image_folder,
-    #            task='test_accuracy',
+    #            task='test_accuracy', imgsz=300,  # 注意 5//24 之后的模型可能用 640 大小图片
     #            save_incorrect_results=True,
     #            batch_size=8)
 
