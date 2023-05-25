@@ -359,6 +359,7 @@ def prediction(model_path, image_folder, task='prediction', save_incorrect_resul
                     pil_image = torchvision.transforms.ConvertImageDtype(torch.float32)(pil_image)
                     # pil_image 的大小必须和模型要求的输入保持一致。
                     # 设置 antialias=True 是为了避免错误信息的提示。
+                    # imgsz 从 300 变为 640，前处理时间变大约 4 倍，从 4ms 变为 15ms。
                     pil_image = torchvision.transforms.Resize(
                         (imgsz, imgsz), antialias=True)(pil_image)
                     pil_image = pil_image[None, ...]  # 预测时，需要输入 4D 张量
@@ -370,8 +371,9 @@ def prediction(model_path, image_folder, task='prediction', save_incorrect_resul
                     pred = model(pil_image)  # 进行预测
                     t_inference = time.perf_counter()
 
-                    save_image(img_path=each_image, results_dir=results_dir,
-                               prediction=pred, classes=classes)
+                    if save_incorrect_results:
+                        save_image(img_path=each_image, results_dir=results_dir,
+                                   prediction=pred, classes=classes)
                     t_postprocess = time.perf_counter()
 
                     # 因为是用多线程并发加载图片，所以要改变加载时间的计算方式，即变为从一个循环结束为起点，
@@ -490,10 +492,10 @@ def get_dataset(root: pathlib.Path, dataset_type=None, imgsz=None):
 
 
 @utilities.timer
-def main(data_root, lr=1.1e-2, batch_size=8, epochs=5, classes=2,
+def main(data_root, lr=1.1e-2, batch_size=8,
+         epochs=5, milestones=(1, ), classes=2,
          imgsz=640,
-         optimizer_name='SGD', momentum=0.9,
-         step=10,
+         optimizer_name='SGD', gamma=0.5, momentum=0.9,
          checkpoint_path=None, save_model=True):
     """创建一个 RegNet 模型，并且对其进行训练。
 
@@ -502,9 +504,11 @@ def main(data_root, lr=1.1e-2, batch_size=8, epochs=5, classes=2,
         lr (float): 一个浮点数，是模型的学习率。
         batch_size (int): 一个整数，是批量的大小。
         epochs (int): 一个整数，是训练的迭代次数。
+        milestones (list[int, int]): 一个元祖，其中元素全为整数，是衰减发生时的迭代次数。
         classes (int): 一个整数，是模型需要区分的类别数量。目前为 2 类，即只区分有异物和无异物。
         imgsz (int): 一个整数，是图片缩放后的大小，即图片会被缩放到这个大小的高度和宽度，然后进行训练。
         optimizer_name (str): 一个字符串，是 'SGD' 或 'Adam'，表示使用的优化器名字。
+        gamma (float): 一个整数，。
         checkpoint_path (str): 一个字符串，指向一个文件夹，训练好的最佳模型将存放在此路径中。
         save_model (bool): 布尔值。如果为 True，则会在训练过程中，把验证集准确度最高的模型保存下来。
     """
@@ -521,8 +525,10 @@ def main(data_root, lr=1.1e-2, batch_size=8, epochs=5, classes=2,
 
     # 时间格式 '20230512_1016'，前半部分为日期，后半部分为小时和分钟
     time_suffix = time.strftime('%Y%m%d_%H%M')
+    # 用字符串形式记录 milestones，并放到后面的名字 experiment_name 中。
+    str_milestones = '-'.join([str(milestone) for milestone in milestones])
     experiment_name = f'{time_suffix}_{dataset_size}_{optimizer_name}_lr{lr:.2e}_b{batch_size}' \
-                      f'_e{epochs}_step{step}_hue0.4_imgsz{imgsz}'  # \_m{momentum}_nesterov
+                      f'_e{epochs}_milestones{str_milestones}_gamma{gamma}_hue0.4_imgsz{imgsz}'  # \_m{momentum}_nesterov
     # f'degrees{degrees}_nbs{nbs}_close_mosaic{close_mosaic}_'
     model_name = f'{experiment_name}.pt'
     highest_accuracy_path = checkpoint_path / model_name
@@ -535,7 +541,8 @@ def main(data_root, lr=1.1e-2, batch_size=8, epochs=5, classes=2,
     highest_accuracy = 0  # 记录最高准确度，据此保存模型。
 
     # {momentum=}
-    print(f'{lr=:.2e}, {batch_size=}, {optimizer_name=}, {imgsz=}, \n{epochs=}, {step=}')
+    print(f'{lr=:.2e}, {batch_size=}, {optimizer_name=}, {imgsz=}\n'
+          f'{epochs=}, {milestones=}, {gamma=}')
 
     # input_shape = (3, 32, 32)
     # size = np.prod(input_shape)
@@ -557,8 +564,8 @@ def main(data_root, lr=1.1e-2, batch_size=8, epochs=5, classes=2,
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     elif optimizer_name == 'SGD':
         optimizer = torch.optim.SGD(model.parameters(), lr=lr)  # , momentum=momentum, nesterov=True
-        scheduler = lr_scheduler.StepLR(
-            optimizer=optimizer, step_size=step, gamma=0.5)
+        scheduler = lr_scheduler.MultiStepLR(
+            optimizer=optimizer, milestones=milestones, gamma=gamma)
 
     for t in range(epochs):
         print(f"Epoch {t + 1}/{epochs}\n-------------------------------")
@@ -593,32 +600,32 @@ def main(data_root, lr=1.1e-2, batch_size=8, epochs=5, classes=2,
 
 if __name__ == '__main__':
     # 训练模型
-    data_root = '~/work/cv/2023_05_04_regnet/classification_data'
-    main(data_root=data_root,
-         lr=5e-3, batch_size=2,  # 1.1e-2
-         imgsz=640,
-         epochs=27, step=8)
+    # data_root = '~/work/cv/2023_05_04_regnet/classification_data'
+    # main(data_root=data_root,
+    #      lr=5e-3, batch_size=2,  # 1.1e-2
+    #      imgsz=640,
+    #      epochs=130, milestones=[50, 80, 110], gamma=0.5)
 
     # 测试准确度
     #  RegNet_20230523_1058_testacc_989 20230523_1341_3k_SGD_lr1.10e-02_b8_e15_step10_testacc_985
     #  20230523_1553_3k_SGD_lr5.00e-03_b8_e12_step10_jitter_testacc_989
     # # image_folder = r'~/work/cv/2023_05_04_regnet/classification_data'
 
-    # 20230523_1958_4k_SGD_lr5.00e-03_b8_e25_step10_jitter_hue0.4_testacc_995
-    # model_path = r'checkpoints/' \
-    #              r'20230523_2312_4k_SGD_lr1.10e-02_b8_e125_step30_hue0.4_imgsz300_val987_test996.pt'
-    # image_folder = r'~/work/cv/2023_05_04_regnet/tryout/random_test'
-    # prediction(model_path=model_path, image_folder=image_folder,
-    #            task='test_accuracy', imgsz=300,  # 注意 5//24 之后的模型可能用 640 大小图片
-    #            save_incorrect_results=True,
-    #            batch_size=8)
+    # 20230523_2312_4k_SGD_lr1.10e-02_b8_e125_step30_hue0.4_imgsz300_val987_test996
+    # 20230524_1359_4k_SGD_lr5.00e-03_b2_e27_step8_hue0.4_imgsz640_val989_test990
+    model_path = r'checkpoints/' \
+                 r'20230524_2054_4k_SGD_lr5.00e-03_b2_e130_milestones50-80-110_gamma0.5_hue0.4_imgsz640_val995_test999.pt'
+    image_folder = r'~/work/cv/2023_05_04_regnet/tryout/random_test'
+    prediction(model_path=model_path, image_folder=image_folder,
+               task='test_accuracy', imgsz=640,  # 注意 5/24 之后的模型可能用 640 大小图片
+               save_incorrect_results=True,
+               batch_size=8)
 
     # 对文件夹内图片进行预测
     # image_folder = r'prediction_images'
     # prediction(model_path=model_path, image_folder=image_folder,
+    #            task='prediction', imgsz=640,  # 注意 5/24 之后的模型可能用 640 大小图片
+    #            save_incorrect_results=False,  # 需要保存结果时，设置为 True
     #            batch_size=8)
-
-    # load_image_multithreading(image_folder)
-
 
 
