@@ -147,7 +147,7 @@ adaptiveImageCropping::~adaptiveImageCropping()
 
 
 /*
-* --------------------------------->获取目标矩形的的起点、终点坐标<--------------------------------- *
+* ------------------------------>获取目标矩形(最大)的的起点、终点坐标<------------------------------ *
 * Parameters:
 *     input：
 *         targetLabelCategory：指定的类别索引
@@ -156,7 +156,7 @@ adaptiveImageCropping::~adaptiveImageCropping()
 *         targetCoord：保存 类别=targetLabelCategory的框(宽度最大的一个框)坐标，如果没有符合条件的框。则保存4个异常值-999
 * returnValue:
 *     None
-* --------------------------------->获取目标矩形的的起点、终点坐标<--------------------------------- *
+* ------------------------------>获取目标矩形(最大)的的起点、终点坐标<------------------------------ *
 */
 int adaptiveImageCropping::getTargetCoord(IN const unsigned int& targetLabelCategory, IN const unsigned int& thresLength, OUT std::vector<float>& targetCoord)
 {
@@ -166,14 +166,6 @@ int adaptiveImageCropping::getTargetCoord(IN const unsigned int& targetLabelCate
         std::cout << "mDetRes为空,请检查..." << std::endl;
         return -1;
     }
-    // else
-    // {
-    //     if (6 != (sizeof(mDetRes) / mDetRes.size()) / sizeof(mDetRes[0][0]))
-    //     {
-    //         std::cout << "mDetRes[0]长度不正确..." << std::endl;
-    //         return -1;
-    //     }
-    // }
     
     //变量定义及初始化
     float temporaryLength = 0;
@@ -200,6 +192,11 @@ int adaptiveImageCropping::getTargetCoord(IN const unsigned int& targetLabelCate
                 }
             }
         }
+    }
+
+    if(-999 == targetCoord[0] && -999 == targetCoord[2])
+    {
+        return -1;
     }
 
     return 0;
@@ -291,29 +288,44 @@ int adaptiveImageCropping::adaptiveCropImage(IN const unsigned int& targetLabelC
         std::cout << "mDetRes为空,请检查..." << std::endl;
         return -1;
     }
-    // else
-    // {
-    //     if (6 != (sizeof(mDetRes) / mDetRes.size()) / sizeof(mDetRes[0][0]))
-    //     {
-    //         std::cout << "mDetRes[0]长度不正确..." << std::endl;
-    //         return -1;
-    //     }
-    // }
-
-    std::vector<float> targetCoord;
-    getTargetCoord(targetLabelCategory, thresLength, targetCoord);
-
-    targetCoordUpSampling(targetCoord);
-    dilationTargetCoord(offsetHeight, offsetWidth, targetCoord);
-
-    //注意：使用Rect或者Range切图内存共享，处理后的内存可能不连续，所以要加clone()重新开一段内存；
-    mDstImage = mSrcImage(cv::Rect(targetCoord[0], targetCoord[1], targetCoord[2] - targetCoord[0], targetCoord[3] - targetCoord[1])).clone();
-    //mDstImage = mSrcImage(cv::Range(targetCoord[1], targetCoord[3]), cv::Range(targetCoord[0], targetCoord[2])).clone();
     
+    int res = 0;
+    std::vector<float> targetCoord;
+    res = getTargetCoord(targetLabelCategory, thresLength, targetCoord);
+    if(0 != res)
+    {
+        return res;
+    }
+
+    res = targetCoordUpSampling(targetCoord);
+    if(0 != res)
+    {
+        return res;
+    }
+
+    res = dilationTargetCoord(offsetHeight, offsetWidth, targetCoord);
+    if(0 == res)
+    {
+        //注意：使用Rect或者Range切图内存共享，处理后的内存可能不连续，所以要加clone()重新开一段内存；
+        mDstImage = mSrcImage(cv::Rect(targetCoord[0], targetCoord[1], targetCoord[2] - targetCoord[0], targetCoord[3] - targetCoord[1])).clone();
+        //mDstImage = mSrcImage(cv::Range(targetCoord[1], targetCoord[3]), cv::Range(targetCoord[0], targetCoord[2])).clone();
+    }
+    else
+    {
+        return res;
+    }
+
     //自适应填充图像
     cv::Mat imageFilled;
-    adaptivaFillImage(mDstImage, dstImgHeight, dstImgWidth, imageFilled);
-    mDstImage = imageFilled;
+    res = adaptivaFillImage(mDstImage, dstImgHeight, dstImgWidth, imageFilled);
+    if(0 == res)
+    {
+        mDstImage = imageFilled;
+    }
+    else
+    {
+        return res;
+    }
 
     return 0;
 }
@@ -418,8 +430,8 @@ int adaptiveImageCropping::adaptivaFillImage(IN const cv::Mat& srcImage, IN cons
     int left = 0;
     int right = 0;
 
-    float srcRatio = srcImgWidth / srcImgHeight;
-    float dstRatio = dstImgWidth / dstImgHeight;
+    float srcRatio = float(srcImgWidth) / float(srcImgHeight);
+    float dstRatio = float(dstImgWidth) / float(dstImgHeight);
     if (srcRatio > dstRatio)    
     {
         deltaSrcImgHeight = int(srcImgWidth * dstImgHeight / dstImgWidth - srcImgHeight);

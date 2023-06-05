@@ -497,7 +497,7 @@ int Uart::receive_base(unsigned char *pdata,int len)
 // ----------------------------------->parameters<----------------------------------
 void Uart::signal_handler_IO (INPUT int status)  
 {  
-    printf ("-------------------------------------------signal_handler_IO:将要收到驱动版发来的消息-----------------------------------------.\n");  
+    printf ("--------------signal_handler_IO:将要收到驱动版发来的消息---------------.\n");  
     m_waitFlag = 0;  
 }  
 

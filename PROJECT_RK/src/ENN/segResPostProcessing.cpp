@@ -288,6 +288,11 @@ LT::ErrorValue postProcessingSegRes(INPUT cv::Mat& image, OUTPUT float& angle)
 		}
 	}
 
+	if(points[0].size()<2 || points[1].size()<2)
+	{
+		return LT::ErrorValue::POINTS_NUM_WRONG;
+	}
+
 	// ֱ�����
 	cv::Vec4f lines[2];                                         
 	cv::fitLine(points[0], lines[0], cv::DIST_L2, 0, 0.01, 0.01);

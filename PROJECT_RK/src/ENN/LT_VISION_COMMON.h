@@ -31,7 +31,7 @@
 namespace LT
 {
     // ǿö���࣬���ڲ������;
-    enum class ErrorValue : unsigned int
+    enum class ErrorValue : int
     {
         SUCCESS = 0,                  //��������ȷ���
         IS_VARIABLE_EMPTY,            //����ı���Ϊ��
@@ -43,8 +43,8 @@ namespace LT
         GET_CURRENT_FRAME_SUCCESS,    //��ȡ��ǰ֡�ɹ�
         FAILED_TO_GET_CURRENT_FRAME,  //��ȡ��ǰ֡ʧ��
         IMAGE_EMPTY,                  //ͼ��Ϊ��
-        WRONG_LABEL_NUM               //�ָ�����żܸ�������
-
+        WRONG_LABEL_NUM,              //�ָ�����żܸ�������
+        POINTS_NUM_WRONG              //用于拟合线的点集数量太少
     };
 
 

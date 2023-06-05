@@ -1,3 +1,15 @@
+// ==========================================================
+// 实现功能：相机线程，实现读图、写图、转头等操作
+// 文件名称：CapProcess.cpp
+// 相关文件：无
+// 作   者：Liangliang Bai (liangliang.bai@leapting.com)
+// 版   权：<Copyright(C) 2023-Leapting Technology Co.,LTD All rights reserved.>
+// 修改记录：
+// 日   期             版本       修改人   走读人  
+// 2022.9.28          2.0.2      白亮亮
+
+// 修改记录：无
+// ==========================================================
 #include "CapProcess.hpp"
 #include "../include/common.h"
 
@@ -13,18 +25,18 @@ void *CapProcess::start_thread(void *param)
 int CapProcess::init()
 {
     m_start = false;                                                      //当是空图时为false则预测线程也不会取图成功，同时还可以保证每一张图至多被预测线程预测一次;
-    m_bdebug = true;                                                      //控制图片来自本地还是摄像头(true:加载硬盘上的图片检测; false:从摄像头获取图片进行检测) 
-    m_interval = 10;                                                      //帧间隔，摄像头隔m_interval帧向缓存中放图
+    m_bdebug = false;                                                     //控制图片来自本地还是摄像头(true:加载硬盘上的图片检测; false:从摄像头获取图片进行检测) 
+    m_interval = 20;                                                      //帧间隔，摄像头隔m_interval帧向缓存中放图
     total_fram_num = 0;                                                   //总帧数初始化（从摄像头获取到的图的总帧数）
     mainThreadMsg = 255;                                                  //从主线程获取到的云台消息
 
     //----------------------------->云台控制参数初始化<-----------------------------//
-    g_bNetSDKInitFlag = FALSE;                                                                              // 初始化函数返回值，为0说明初始化失败
+    g_bNetSDKInitFlag = FALSE;                                            //初始化函数返回值，为0说明初始化失败
     g_lLoginHandle = 0L;                                                                                             // 登录函数的返回值，为0说明登录失败或未登录状态
-    memcpy(g_szDevIp, "192.168.1.108", sizeof("192.168.1.108"));         // 相机IP地址
+    memcpy(g_szDevIp, "192.168.1.108", sizeof("192.168.1.108"));          //相机IP地址
     g_nPort = 37777;                                                                                                      // tcp 连接端口,需与期望登录设备页面 tcp 端口配置一致
-    memcpy(g_szUserName, "admin", sizeof("admin"));                      // 用户名
-    memcpy(g_szPasswd, "Litian123", sizeof("Litian123"));                // 登录密码
+    memcpy(g_szUserName, "admin", sizeof("admin"));                       //用户名
+    memcpy(g_szPasswd, "Litian123", sizeof("Litian123"));                 //登录密码
 
     InitPtz();
     //----------------------------->云台控制参数初始化<-----------------------------//
@@ -103,10 +115,10 @@ void CapProcess::InitPtz()
 
             // 设置云台初始化角度
             std::cout<<"第一次初始化转动云台"<<std::endl;
-            ptzControl(730, 10);     // 1P机器
-            // ptzControl(2070, 10);     // 1P机器
-            // ptzControl(2470, 10);       // 1.5P机器
-            sleep(2);                   // 不要删除，防止转头动作还没执行完
+            ptzControl(740, 10);        //1P机器
+            // ptzControl(2080, 10);    //1P机器
+            // ptzControl(2470, 10);    //1.5P机器
+            sleep(2);                   //不要删除，防止转头动作还没执行完
         }
     }
 }
@@ -154,28 +166,30 @@ void CapProcess::getMsgFromMainThread(INPUT unsigned char& signalValue)
         case 1:
         {
             //转云台(往左)
-            ptzControl(730, 10);     // 1P机器
-            // ptzControl(930, 10);        // 1.5P机器
+            ptzControl(740, 10);     // 1P机器
+            // ptzControl(930, 10);  // 1.5P机器
             break;         
         }
 
         case 2:
         {
             //转云台(往右)
-            ptzControl(2070, 10);    // 1P机器
-            // ptzControl(2470, 10);       // 1.5P机器
+            ptzControl(2080, 10);    // 1P机器
+            // ptzControl(2470, 10); // 1.5P机器
             break;
         }
 
         case 3:
         {
-            ptzControl(930, 8192);        // 1.5P机器
+            ptzControl(740, 1000);     // 1P机器
+            // ptzControl(930, 80);  // 1.5P机器
             break;
         }
 
         case 4:
         {
-            ptzControl(2470, 8192);     // 1.5P机器
+            ptzControl(2080, 1000);    // 1P机器
+            // ptzControl(2470, 80); // 1.5P机器
             break;
         }
 

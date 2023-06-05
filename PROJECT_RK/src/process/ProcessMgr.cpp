@@ -1,18 +1,36 @@
+// ==========================================================
+// 实现功能：视觉框架主线程
+// 文件名称：ProcessMgr.cpp
+// 相关文件：无
+// 作   者：Liangliang Bai (liangliang.bai@leapting.com)
+// 版   权：<Copyright(C) 2023-Leapting Technology Co.,LTD All rights reserved.>
+// 修改记录：
+// 日   期             版本       修改人   走读人  
+// 2022.9.28          2.0.2      白亮亮
+
+// 修改记录：
+// 2023-05-24:检测到下坡，将发送1次消息改为发多次消息
+//            分割后可以通过则屏蔽一端时间(防止在过桥的过程出现异常结果)
+// ==========================================================
+
 #include "ProcessMgr.hpp"
 #include "segResPostProcessing.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <numeric>
-#include <chrono>     //用于测试时间，该方式更精准
+#include <chrono>                       //用于测试时间，该方式更精准
 
-//相机云台归零频率
-#define cameraPtzResetFrequence 200    
+#define cameraPtzResetFrequence 200     //相机云台归零频率
+#define bridgeLengthThres 280           //桥架长度阈值
+#define lowerBridgeLengthThres 250      //下坡类别目标长度
+#define ignoreDownBredgeInfo 100        //忽略下桥架消息次数
+#define minCt 500000                    //一次检测使用的最小时间，小于这个时间则阻塞
 
 using std::chrono::high_resolution_clock;
 using std::chrono::milliseconds;
 
-//外面的对象调用GetInstance函数，可以将该全局对象返赋给外面的对象
+//外面的对象调用GetInstance函数，可以将该全局对象赋给外面的对象
 ProcessMgr *ProcessMgr::mpProcessMgr = NULL;
 ProcessMgr *ProcessMgr::GetInstance()
 {
@@ -25,18 +43,25 @@ ProcessMgr *ProcessMgr::GetInstance()
 }
 
 
-
 int ProcessMgr::init()
 {
     int ret = -1;                                                // 初始化一个变量，
     char* portName = "/dev/ttyS3";                               // RKNN 烧写系统后 dev下的端口号，没有 ttyS3 说明系统有问题，
     m_uart = Uart(portName);                                     // 通信端口号，
     m_bdebug = true;                                             // 调试模式标志(true则会写日志和保存部分结果图)
-    m_b_detect = false;                                           // 检测模型(大模型)是否运行标志
-    m_b_detect2 = false;                                          // 检测模型(小模型)是否运行标志，该模型不能关，切记
-    m_b_seg = false;                                              // 分割算法标志,改模型不能关，切记
-    m_b_weatherClassification = true;                           // 是否运行天气分类
-    m_b_cla = true;                                             // 清洁度分类标志
+    m_b_detect = true;                                           // 检测模型(大模型)是否运行标志
+    if(m_b_detect)
+    {
+        m_b_detect2 = true;                                      // 检测模型(小模型)是否运行标志，该模型不能手动开关，切记
+        m_b_seg = true;                                          // 分割模型是否运行标志，该模型不能手动开关关，切记
+    }
+    else
+    {
+        m_b_detect2 = false;                                          
+        m_b_seg = false;
+    }
+    m_b_weatherClassification = true;                            // 是否运行天气分类
+    m_b_cla = false;                                             // 清洁度分类标志
     minCleannessValue = 10.f;                                    // 清洁度最小值
     maxCleannessValue = 90.f;                                    // 清洁度最大值
 
@@ -55,8 +80,9 @@ int ProcessMgr::init()
     writeMsgToLogfile("当前视觉框架版本号:",visionFrameVersion); 
 
     mpConfiger = Configer::GetInstance(); 
-
-    ret = m_uart.init();                                               // 启动消息线程
+    
+    // 启动消息线程
+    ret = m_uart.init();                                         
     if(0 != ret)
     {
         std::cout<<"消息线程启动失败,请检查..."<<std::endl;
@@ -250,20 +276,27 @@ int ProcessMgr::run()
     unsigned char segInfo = 0x00;                               //发送给驱动板的分割(角度太大)消息
     unsigned char speedDown = 0x64;                             //发送给驱动板的 要下坡了，请减速
     unsigned char restoreSpeed = 0x65;                          //发送给驱动板的 下坡结束，请恢复到原来的速度
-    bool lastDownhillStatus = false;                            //上次检测到的 是否下桥状态，和最新图的下桥架状态做对比，结果不一致，则发消息并更新状态 
+    bool lastDownhillStatus = false;                            //上轮检测到的 是否下桥状态，和最新轮的下桥架状态做对比，结果不一致，则发消息并更新状态 
+    bool latestDownhillStatus = false;                          //本轮检测到的是否下桥架状态
     bool lastfractureStatus = false;                            //上次是否断裂的状态
+    bool latestFractureStatus = false;                          //最新是否断裂状态
     bool lastAngleStatus = false;                               //上次角度是否太大的状态
+    bool latestAngleStatus = false;                             //当前角度是否太大的状态
     unsigned char signalFromMsgThread = 255;                    //从消息线程获取到的消息
     unsigned char msgsTomsgThread[4] = {254, 90, 254, 254};     //存储检测的各种信息的数组，当其中有值发生变化就立刻发送到消息线程，254是视觉询问驱动板专用数值(当所以值为254时，认为一切正常)；
-    high_resolution_clock::time_point beginTime;                //起始时间
-    high_resolution_clock::time_point endTime;                  //结束时间
-    milliseconds timeInterval;                                  //时间间隔
+    high_resolution_clock::time_point beginTime;                //当前图片检测开始起始时间
+    high_resolution_clock::time_point endTime;                  //当前图片检测结束结束时间
+    milliseconds timeInterval;                                  //当前图片检测时间间隔
+    int downBridgeSleepTimes = 99999;                           //减速、加速计数
     bool bSaveOrgImage = true;                                  //是否保存原始图像  
     unsigned char cameraStatus = 0;                             //相机方向状态1,0代表清洗机没有动，不用管相机方向
     unsigned char cameraStatus2 = 0;                            //相机方向状态2
     vector<float *> res;                                        //存放第一个检测模型的推理结果
     vector<float *> res2;                                       //存放第一个检测模型的推理结果
-
+    int bridgeNumWeights[3] = {0,0,0};                          //先进先出，记录最新三次是否检测到桥架，检测到了将最新值置1，否则置0
+    int lowerBridgeNumWeights[3] = {0,0,0};                     //先进先出，记录最新三次是否检测到下桥架，检测到了将最新值置1，否则置0
+    bool speedDownStatus = false;                               //减速状态，已减速则设置为true，已恢复速度则设置为false
+    int sentSpeedDownInfoStatus = -999;                         //发送减速/恢复速度的状态(防止仅发送1次对方收不到)，1则持续发减速，0则持续发恢复速度
     while (1) 
     {
         //注意：模块3的顺序不能写在模块1和2之前；
@@ -307,9 +340,16 @@ int ProcessMgr::run()
         writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[1]);
         writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[2]);
         writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[3]);
+        if(detInfo == msgsTomsgThread[3] || segInfo == msgsTomsgThread[3])
+        {
+            //上次检测到断裂，掉头运行需要先减速，减速日时阻塞一段时间直到返回到第一次检到测断裂的位置之外
+            std::cout<<"准备减速"<<std::endl;
+            // usleep(7000000);
+        }
+        // 重置上次的检测结果
         msgsTomsgThread[2] = 254;
         msgsTomsgThread[3] = 254;
-        
+
         // 3.2、收消息：从消息线程获取驱动板发来的消息
         m_uart.sendMsgToMainThread(signalFromMsgThread);
         writeMsgToLogfile("从消息线程获取的转头消息", signalFromMsgThread);
@@ -344,10 +384,14 @@ int ProcessMgr::run()
             writeMsgToLogfile("将相机方向消息发给相机和图像线程", signalFromMsgThread);
             
             // 3.3.3、相机线程取完方向消息后需要重新置为异常值255
-            signalFromMsgThread = 255;
-            
+            signalFromMsgThread = 255;  
         }
         //--------------------------->3、消息交互<---------------------------//
+
+
+        //------------------------->判断图像是否模糊<-------------------------//
+        // Do something
+        //------------------------->判断图像是否模糊<-------------------------//
 
 
         // 注意：将所有天气分为多个类别，可以工作的类别排布在后面（100-199），不可工作的类别排布在前面（0-99）
@@ -366,6 +410,7 @@ int ProcessMgr::run()
             im_classify_weather_part = frame(cv::Rect(col_center-m_p_cla_weather_cfg ->feed_w/2, row_center-m_p_cla_weather_cfg ->feed_h/2, m_p_cla_weather_cfg ->feed_w, m_p_cla_weather_cfg ->feed_h)).clone();
             cv::resize(im_classify_weather_part, im_classify_weather_part_resize, cv::Size(m_p_cla_weather_cfg ->feed_w,m_p_cla_weather_cfg ->feed_h), (0, 0), (0, 0), cv::INTER_LINEAR);
             HWC2CHW(im_classify_weather_part_resize, chwImgWeather);
+            cv::imwrite("/userdata/output/watherImgCropped.jpg", im_classify_weather_part_resize);
             
             // 4.2天气分类推理
             int ret = mCla_weather.run(chwImgWeather, "CHW", classifyRes);
@@ -383,6 +428,7 @@ int ProcessMgr::run()
             timer.end("Cla_weather");
  
             // 4.3、将天气分类结果写入到日志
+            // classifyRes = 0;
             if(0 == classifyRes)
             {
                 writeMsgToLogfile2("天气分类结果:晴天", float(classifyRes));
@@ -469,9 +515,9 @@ int ProcessMgr::run()
             std::cout<<"-------------->Running object detect model 1---------------"<<std::endl;
 
             // 6.2、变量设置、初始化等操作
-            m_b_detect2 = false;
             res.clear();
-            
+            downBridgeSleepTimes++;
+
             // 6.3、图像前处理
             timer.start();
             im_detect = frame;
@@ -494,76 +540,159 @@ int ProcessMgr::run()
             CHECK_EXPR(ret != 0,-1);
             timer.end("Detect1");
                         
-            // 6.5、根据推理输出的结果，统计每个类别([bridge,lowerBridge])目标数
+            // 6.5、根据推理输出的结果，对类别0和1根据目标宽度先过滤一遍并统计每个类别([bridge,lowerBridge])目标数；
             int bridgeNum = 0;                                          
-            int lowerBridgeNum = 0;                                     
+            int lowerBridgeNum = 0;
+            int xxx = 0;   
+            int xxx2 = 0;                                
             for (int i = 0; i < res.size(); ++i) 
             {
-                if (res[i][5] == 0.)                                      
+                if (res[i][5] == 0. && (res[i][2]-res[i][0]>bridgeLengthThres))                                      
                 {
                     bridgeNum++;
                 }
                 
-                if (res[i][5] == 1.)                                       
+                if (res[i][5] == 1. && (res[i][2]-res[i][0]>lowerBridgeLengthThres))                                       
                 {
                     lowerBridgeNum++;
                 }
+
+                if (res[i][5] == 2.)                                       
+                {
+                    xxx++;
+                }
+
+                if (res[i][5] == 3.)                                       
+                {
+                    xxx2++;
+                }
+            }
+            
+            // 统计是否下桥的权重，当三次中有两次结果一样，则准备更新下桥状态
+            lowerBridgeNumWeights[0] = lowerBridgeNumWeights[1];
+            lowerBridgeNumWeights[1] = lowerBridgeNumWeights[2];
+            if(lowerBridgeNum>0)
+            {
+                lowerBridgeNumWeights[2] = 1;
+            }
+            else
+            {
+                lowerBridgeNumWeights[2] = 0;
             }
 
-            // 6.5、下桥状态判断，前后两次检测状态不一样则发消息并更新状态;
-            bool latestDownhillStatus = false;                             
-            if(lowerBridgeNum > 0)
+            // 6.5、下桥状态判断，连续3次检测结果之和发生改变则更新下桥状态、发消息; 
+            // 6.5.1、统计是下坡还是非下坡                            
+            if(lowerBridgeNumWeights[0]+lowerBridgeNumWeights[1]+lowerBridgeNumWeights[2] >= 2)
             {
                 latestDownhillStatus = true;
             }
-
-            if(lastDownhillStatus != latestDownhillStatus)
+            else
             {
-                if(lastDownhillStatus==false && latestDownhillStatus==true)
+                latestDownhillStatus = false;
+            }
+            
+            // 6.5.2、减速参数更新
+            if(false == lastDownhillStatus && true == latestDownhillStatus)
+            {
+                if((downBridgeSleepTimes > ignoreDownBredgeInfo) && (false == speedDownStatus))
                 {
-                    msgsTomsgThread[2] = speedDown;
-                    writeMsgToLogfile("发送减速的消息给消息消息：请减速", speedDown);
+                    downBridgeSleepTimes = 0;
+                    speedDownStatus = true; 
+                    sentSpeedDownInfoStatus = 1;  
+                    lastDownhillStatus = latestDownhillStatus;                
                 }
-                else
+            }
+            
+            // 6.5.3、恢复速度参数更新；注：该模块不能将downBridgeSleepTimes重新置0；
+            if(true == lastDownhillStatus && false == latestDownhillStatus)
+            {
+                if((downBridgeSleepTimes > ignoreDownBredgeInfo) && (true == speedDownStatus))
                 {
-                    msgsTomsgThread[2] = restoreSpeed;
-                    writeMsgToLogfile("发送恢复速度的消息给消息线程:请恢复速度", restoreSpeed);
+                    speedDownStatus = false;
+                    sentSpeedDownInfoStatus = 0;
+                    lastDownhillStatus = latestDownhillStatus; 
                 }
-                // 更新状态
-                lastDownhillStatus = latestDownhillStatus;
             }
 
-            // 6.6、检测桥架则启动检测模型2，没检测到桥架则将检测模型2和分割都不启动
-            if(bridgeNum>=1)
+            // 6.5.4、发送减速消息
+            if(1 == sentSpeedDownInfoStatus)
+            {
+                msgsTomsgThread[2] = speedDown;
+                writeMsgToLogfile("发送减速的消息：请减速", speedDown); 
+            }
+            
+            // 6.5.5、发送恢复速度消息
+            if(0 == sentSpeedDownInfoStatus)
+            {
+                msgsTomsgThread[2] = restoreSpeed;
+                writeMsgToLogfile("发送恢复速度的消息给消息线程:请恢复速度", restoreSpeed);
+            }
+
+            // 6.6、预留类别
+            if(xxx>0)
+            {
+                // Do something
+            }
+
+            // 6.7、预留类别2；注：需要将异常图(起始站、低头图、背景图)进行了抑制
+            if(xxx2>0)
+            {
+                // Do something
+            }
+
+            // 统计桥架区域的权重，当连续三次中有两次结果一样，则准备裁图
+            bridgeNumWeights[0] = bridgeNumWeights[1];
+            bridgeNumWeights[1] = bridgeNumWeights[2];
+            if(bridgeNum>0)
+            {
+                bridgeNumWeights[2] =1;
+                writeMsgToLogfile2("------------------------------------检测到桥架-------------------------------------", 0);
+                std::cout<<"------------------------------------检测到桥架-------------------------------------"<<std::endl;
+            }
+            else
+            {
+                bridgeNumWeights[2] =0;
+                writeMsgToLogfile2("---------未检测到桥架---------", 0);
+                std::cout<<"---------未检测到桥架---------"<<std::endl;
+            }
+
+            // 6.8、本轮(连续三次检测有两次检测到桥架区域)检测到桥架则启动检测模型2、裁图；
+            if(bridgeNumWeights[0]+bridgeNumWeights[1]+bridgeNumWeights[2] >= 2)
             {
                 writeMsgToLogfile("模型1检测到有桥架,准备切图!", m_b_detect2);
                 std::cout<<"模型1检测到有桥架,准备切图!"<<std::endl;
 
-                // 6.7、切图：调用自适应切图类进行切图
+                // 6.9、切图：调用自适应切图类进行切图
                 int * a = new int();
                 adaptiveImageCropping imgCrop(frame, res, 1, m_p_yolo_cfg->feed_h, m_p_yolo_cfg->feed_w, a);
-                imgCrop.adaptiveCropImage(0, 20, 5,5,m_p_yolo_cfg2->feed_h, m_p_yolo_cfg2->feed_w);
+                imgCrop.adaptiveCropImage(0, bridgeLengthThres, 5,5,m_p_yolo_cfg2->feed_h, m_p_yolo_cfg2->feed_w);
                 if(!imgCrop.mDstImage.empty())
                 {
                     m_b_detect2 = true;
                     im_detect2 = imgCrop.mDstImage;
                     im_seg = imgCrop.mDstImage;
-                    writeMsgToLogfile("切到用于检测2的图像!", m_b_detect2);
-                    std::cout<<"切到用于检测2的图像!"<<std::endl;
+                    writeMsgToLogfile("成功切到用于检测2的图像!", m_b_detect2);
+                    std::cout<<"成功切到用于检测2的图像!"<<std::endl;
                 }
                 else
                 {
+                    m_b_detect2 = false;
                     m_b_seg = false;
+                    lastfractureStatus = false;
+                    lastAngleStatus = false;
                     writeMsgToLogfile("未切到用于检测2的图像!", m_b_detect2);
                     std::cout<<"未切到用于检测2的图像"<<std::endl;
                 }
             }
             else
             {
+                m_b_detect2 = false;
                 m_b_seg = false;
+                lastfractureStatus = false;
+                lastAngleStatus = false;
             }
  
-            // 6.8、保存日志及检测结果图
+            // 6.10、保存日志及检测结果图
             if (m_bdebug == true && det_cnt < 1024)
             {
                 if (res.size() > 0)               
@@ -598,7 +727,6 @@ int ProcessMgr::run()
             std::cout<<"-------------->Running object detect model 2<---------------"<<std::endl;
 
             // 7.2、变量设置、初始化等操作
-            m_b_seg = false;
             res2.clear();
             
             // 7.3、图像前处理
@@ -622,21 +750,31 @@ int ProcessMgr::run()
             CHECK_EXPR(ret != 0,-1);
             timer.end("Detect2");
 
-            // 7.5、根据推理输出的结果，统计每个类别([fracture，no fracture])目标数
+            // 7.5、根据推理输出的结果，统计每个类别([no fracture,fracture])目标数
             int fractureNum = 0;                                       
             for (int i = 0;i < res2.size(); ++i) 
             {
-                if (res2[i][5] == 0.)                                    
+                if (res2[i][5] == 1.)                                    
                 {
                     fractureNum++;
                 }
             }
 
-            // 7.6、是否有断裂 状态判断，两次状态不一致则发消息(这样可以做到 只发一次断裂/无断裂的消息给驱动板）
-            bool latestFractureStatus = false;                          
+            // 7.6、是否有断裂 状态判断，两次状态不一致则发消息(这样可以做到 只发一次断裂/无断裂的消息给驱动板）                          
             if(fractureNum > 0)
             {
                 latestFractureStatus = true;
+                m_b_seg = false;
+                lastAngleStatus = false;
+                writeMsgToLogfile2("**************************************检测到断裂,机器准备返回*************************************", 0);
+                std::cout<<"**************************************检测到断裂*************************************"<<std::endl;
+            }
+            else
+            {
+                latestFractureStatus = false;
+                m_b_seg = true;
+                writeMsgToLogfile("检测到桥架区域无断裂,将分割模型标识符置为true", m_b_seg);
+                std::cout<<"**********未检测到断裂**********"<<std::endl;
             }
 
             if(lastfractureStatus != latestFractureStatus)
@@ -653,15 +791,8 @@ int ProcessMgr::run()
 
                 lastfractureStatus = latestFractureStatus;
             }
-
-            // 7.7、未检测到断裂则启动分割模型
-            if(0 == fractureNum)
-            {
-                m_b_seg = true;
-                writeMsgToLogfile("检测到桥架区域无断裂,将分割模型标识符置为true", m_b_seg);
-            }
             
-            // 7.8、保存日志及检测结果图
+            // 7.7、保存日志及检测结果图
             if (m_bdebug == true && det_cnt2 < 1024)
             {
                 if (res2.size() > 0)               
@@ -721,26 +852,37 @@ int ProcessMgr::run()
             writeMsgToLogfile2("分割后计算角度结果", angle);
 
             // 8.5、根据角度值，给驱动板发消息及状态更新
-            bool latestAngleStatus = false;
             if(angle >= angleThresValue)
             {
                 latestAngleStatus = true;
             }
-
-            if(lastAngleStatus != latestAngleStatus)
+            else
             {
-                if(lastAngleStatus==false && latestAngleStatus==true)
-                {
-                    msgsTomsgThread[3] = segInfo;
-                    writeMsgToLogfile("发送分割角度结果的消息(上次可以通过，本次无法通过)到消息线程", segInfo);
-                }
-                else
-                {
-                    writeMsgToLogfile2("发送分割角度结果的消息(上次无法通过，本次可以通过)到消息线程", 666);
-                }
-
-                lastAngleStatus = latestAngleStatus;
+                latestAngleStatus = false;
             }
+
+            if(false == lastAngleStatus && true == latestAngleStatus)
+            {
+                msgsTomsgThread[3] = segInfo;
+                writeMsgToLogfile("发送分割角度结果的消息(上次可以通过，本次无法通过)到消息线程", segInfo);
+            }
+            
+            if(true == lastAngleStatus && false == latestAngleStatus)
+            {
+                std::cout<<"++++++++++++++++++++++++++++发送分割角度结果的消息(上次无法通过，本次可以通过)到消息线程++++++++++++++++++++++++++++"<<std::endl;
+                writeMsgToLogfile2("++++++++++++++++++++++++++++发送分割角度结果的消息(上次无法通过，本次可以通过)到消息线程++++++++++++++++++++++++++++", 666);
+                sleep(20);
+            }
+
+            if(lastAngleStatus==false && latestAngleStatus==false)
+            {
+                // 检测到桥架了，且没断、角度也不大,可以通过，在通过桥架的过程，不做任何操作
+                std::cout<<"++++++++++++++++++++++++++++分割到可以通过，进行阻塞++++++++++++++++++++++++++++"<<std::endl;
+                writeMsgToLogfile2("++++++++++++++++++++++++++++分割到可以通过，进行阻塞++++++++++++++++++++++++++++", 0);
+                sleep(20);
+            }
+            lastAngleStatus = latestAngleStatus;
+
             #endif
 
             // 8.6、写日志及将分割结果图保存到硬盘上
@@ -766,6 +908,7 @@ int ProcessMgr::run()
                 cv::imwrite(buffer,im_seg);
                 */
             }
+
         }
         //---------------------------->8、分割<-----------------------------//
 
@@ -778,9 +921,9 @@ int ProcessMgr::run()
         std::cout<<"Running time: "<<timeInterval.count()<<"ms"<<std::endl;
 
         //9.2、阻塞主线程（当主线程运行一次的时间小于300ms，则阻塞）
-        if(timeInterval.count()<300000)
+        if(timeInterval.count()<minCt)
         {
-            usleep(300000-timeInterval.count());  //注意：usleep单位是微妙
+            usleep(minCt-timeInterval.count());  //注意：usleep单位是微妙
         }
         //-------------------------->9、阻塞主线程<--------------------------//            
     }
@@ -962,3 +1105,5 @@ std::string intToString(INPUT int& integer)
 	std::string str = buf;
 	return str;
 }
+
+

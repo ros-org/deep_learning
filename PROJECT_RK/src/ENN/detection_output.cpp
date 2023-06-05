@@ -9,11 +9,10 @@ void DetectionOutput::init(int in_width,int in_height,int num_cls)
 
 	m_num_cls = num_cls;
 	m_max_num1 = 1024;
-	m_conf_thres = 0.4;
+	m_conf_thres = 0.7;
 	m_iou_thres = 0.5;
 	
 	gen_anchors();
-	// cout << "m_anchor_num:" << m_anchor_num << endl;
 	
 	m_innersize = m_num_cls + 5;
 	m_predFilter1 = (float *)malloc(sizeof(float) * m_max_num1 * 6);
@@ -39,6 +38,7 @@ void DetectionOutput::init(int in_width,int in_height,int num_cls)
 	m_BoxArea_div = (float *)malloc(sizeof(float)*m_BoxData_num); 
 	
 }
+
 
 int DetectionOutput::gen_anchors(void)
 {
@@ -82,10 +82,11 @@ int DetectionOutput::gen_anchors(void)
 			}
 		}
 	}
-	//writeTxtFile("data_outputs/anchor.txt",m_pAnchorBoxes,anchor_size);
 	
 	return 0;
 }
+
+
 void DetectionOutput::nms_v0(vector<float  *> &pBoxes,vector<float * > &img_finnal_boxes)
 {
 
@@ -207,6 +208,7 @@ void DetectionOutput::Stage1(float *pred_in)
 	//writeTxtFile("data_outputs/predFilter1.txt",m_predFilter1,size);
 }
 
+
 static bool comp(float *a, float *b) 
 {
 	return a[4] > b[4];
@@ -237,6 +239,9 @@ vector<float *>  &DetectionOutput::run(float *pred_in)
 	}
 	return m_output_finnal;
 }
+
+
+
 
 
 

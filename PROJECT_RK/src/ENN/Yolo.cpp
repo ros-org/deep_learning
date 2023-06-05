@@ -113,22 +113,21 @@ int Yolo::run(unsigned char *p_feed_data, const std::string& imgFmt, vector<floa
     int ret = rknn_inputs_set(m_ctx, m_io_num.n_input, inputs);
     CHECK_EXPR(ret < 0,-1);
 	
-    int dim_sub = m_cls_num + 5;
-	int out_size = m_p_output_attrs[0].n_elems;
-    int dim = out_size / dim_sub;
+    int dim_sub = m_cls_num + 5;                       //1个框包含的数据
+	int out_size = m_p_output_attrs[0].n_elems;        //输出的这个数据流长度
+    int dim = out_size / dim_sub;                      //预测出了多少个框
     //ptrDecode和m_buffer_out指向同一块内存，下面往ptrDecode这块内存写数据，然后将m_buffer_out送入mDetectionOutput.run函数；
 	float (*ptrDecode)[dim_sub] = (float (*)[dim_sub])m_buffer_out;
     //将m_outputs.buf(是void*)这段内存强转成一个数组
 	unsigned char (*ptr)[dim_sub] = (unsigned char (*)[dim_sub])m_outputs.buf;
     memset((unsigned char *)m_outputs.buf,0,out_size);
 
-	unsigned char threshold = 100;
+	unsigned char threshold = 100;    // 这个值是什么？uchar置信度?
 	vector<float *>  res;
     float div_val = 1/255.;
     
-
     Timer timer;
-	for (int i = 0; i < 1; i++) 
+	for (int i = 0; i < 1; i++)     // 1是batch数？
     {
 		// cal_time_start();
         timer.start();
@@ -136,7 +135,6 @@ int Yolo::run(unsigned char *p_feed_data, const std::string& imgFmt, vector<floa
 		CHECK_EXPR(ret < 0,-1);
 		// cal_time_end("rknn_run");
 
-        
 		cal_time_start();
 		ret = rknn_outputs_get(m_ctx, 1, &m_outputs, NULL);
 		CHECK_EXPR(ret < 0,-1);
@@ -145,6 +143,7 @@ int Yolo::run(unsigned char *p_feed_data, const std::string& imgFmt, vector<floa
         memset((unsigned char *)ptrDecode,0,out_size*sizeof(float));
 		for (int i = 0;i < dim;i++) 
         {
+            //为防止nms时框多浪费时间，所以先过滤一遍置信度很小的框
 			if (ptr[i][4] > threshold) 
             {
 				for (int j =  0;j < dim_sub;j++) 
@@ -170,26 +169,38 @@ void Yolo::show_res(Mat &img,vector<float *> &res)
         if(0 == res[i][5])
         {
             cv::rectangle(img,Point(res[i][0],res[i][1]),Point(res[i][2],res[i][3]),cv::Scalar(0,0,255),1,1,0);
+            cv::putText(img, "0:", Point(res[i][0]+2, res[i][1]), 0, 0.4, cv::Scalar(0,0,255));
+            cv::putText(img, std::to_string(res[i][4]), Point(res[i][0]+20, res[i][1]), 0, 0.4, cv::Scalar(0,0,255));
         }
         else if(1 == res[i][5])
         {
             cv::rectangle(img,Point(res[i][0],res[i][1]),Point(res[i][2],res[i][3]),cv::Scalar(0,255,0),1,1,0);
+            cv::putText(img, "1:", Point(res[i][0]+2, res[i][1]), 0, 0.4, cv::Scalar(0,255,0));
+            cv::putText(img, std::to_string(res[i][4]), Point(res[i][0]+20, res[i][1]), 0, 0.4, cv::Scalar(0,255,0));
         }
         else if(2 == res[i][5])
         {
             cv::rectangle(img,Point(res[i][0],res[i][1]),Point(res[i][2],res[i][3]),cv::Scalar(255,0,0),1,1,0);
+            cv::putText(img, "2:", Point(res[i][0]+2, res[i][1]), 0, 0.4, cv::Scalar(255,0,0));
+            cv::putText(img, std::to_string(res[i][4]), Point(res[i][0]+20, res[i][1]), 0, 0.4, cv::Scalar(255,0,0)); 
         }
         else if(3 == res[i][5])
         {
             cv::rectangle(img,Point(res[i][0],res[i][1]),Point(res[i][2],res[i][3]),cv::Scalar(255,255,0),1,1,0);
+            cv::putText(img, "3:", Point(res[i][0]+2, res[i][1]), 0, 0.4, cv::Scalar(255,255,0));
+            cv::putText(img, std::to_string(res[i][4]), Point(res[i][0]+20, res[i][1]), 0, 0.4, cv::Scalar(255,255,0));
         }
         else if(4 == res[i][5])
         {
             cv::rectangle(img,Point(res[i][0],res[i][1]),Point(res[i][2],res[i][3]),cv::Scalar(255,0,255),1,1,0);
+            cv::putText(img, "4:", Point(res[i][0]+2, res[i][1]), 0, 0.4, cv::Scalar(255,0,255));
+            cv::putText(img, std::to_string(res[i][4]), Point(res[i][0]+20, res[i][1]), 0, 0.4, cv::Scalar(255,0,255));
         }
         else
         {
             cv::rectangle(img,Point(res[i][0],res[i][1]),Point(res[i][2],res[i][3]),cv::Scalar(0,255,255),1,1,0);
+            cv::putText(img, "5:", Point(res[i][0]+2, res[i][1]+2), 0, 0.4, cv::Scalar(0,255,255));
+            cv::putText(img, std::to_string(res[i][4]), Point(res[i][0]+20, res[i][1]), 0, 0.4, cv::Scalar(0,255,255));
         } 
     }
     

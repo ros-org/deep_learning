@@ -1,3 +1,14 @@
+// ==========================================================
+// 实现功能：视觉框架主线程
+// 文件名称：ProcessMgr.hpp
+// 相关文件：无
+// 作   者：Liangliang Bai (liangliang.bai@leapting.com)
+// 版   权：<Copyright(C) 2023-Leapting Technology Co.,LTD All rights reserved.>
+// 修改记录：
+// 日   期             版本       修改人   走读人  
+// 2022.9.28          2.0.2      白亮亮
+// ==========================================================
+
 #ifndef __PROCESS_MGR_HPP__
 #define __PROCESS_MGR_HPP__
 
@@ -43,7 +54,6 @@ private:
     bool m_b_seg;                                               //分割模型运行标志
     bool m_b_cla;                                               //分类模型运行标志
     bool m_b_weatherClassification;                             //是否运行天气分类模型           
-    // bool m_binit;
     CapProcess m_CapProcess;
     pthread_t m_tid;                                            // 线程id 号，
     Configer *mpConfiger;                                       //模型参数实例指针
@@ -134,6 +144,8 @@ void getCurrentWeight(INPUT const std::vector<float>& X, INPUT const std::vector
 // returnValue:None;
 // ----------------------------------->parameters<----------------------------------
 void HWC2CHW(INPUT const cv::Mat& hwcImage, OUTPUT uint8_t * chwImage);
+
+
 #endif
 
 

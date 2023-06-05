@@ -20,7 +20,7 @@ int Configer::init()
     /**************YOLO parameters**************/
     m_yolo_cfg.feed_h = 288;                                       //输入图像的height
     m_yolo_cfg.feed_w = 512;                                       //输入图像的width
-    m_yolo_cfg.cls_num = 1;                                        //类别总数
+    m_yolo_cfg.cls_num = 4;                                        //类别总数
     m_yolo_cfg.model = "/userdata/models/detection.rknn";          //yolov5s rknn模型路经
     /**************YOLO parameters**************/
 

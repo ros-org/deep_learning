@@ -45,9 +45,9 @@ public:
         int adaptiveCropImage(IN const unsigned int& targetLabelCategory, IN const  unsigned int& thresLength, IN const unsigned int& offsetHeight, IN const unsigned int&  offsetWidth, IN const unsigned int& dstImgHeight, IN const unsigned int& dstImgWidth);
         int cropImage(IN const int& offsetWidth, IN const int& offsetHeight, IN const  unsigned int& dstImgHeight, IN const unsigned int& dstImgWidth, OUT cv::Mat& dstImage);
         int countTargetNum(OUT std::vector<int>& targetsNum);
+        int getTargetCoord(IN const unsigned int& targetLabelCategory, IN const unsigned  int& thresLength, OUT std::vector<float>& targetCoord);
 
 private:
-        int getTargetCoord(IN const unsigned int& targetLabelCategory, IN const unsigned  int& thresLength, OUT std::vector<float>& targetCoord);
         int targetCoordUpSampling(IN_OUT std::vector<float>& targetCoord);
         int dilationTargetCoord(IN const unsigned int& offsetHeight, IN const unsigned  int& offsetWidth, IN_OUT std::vector<float>& targetCoord);
         int adaptivaFillImage(IN const cv::Mat& srcImage, IN const unsigned int&  dstImgHeight, IN const unsigned int& dstImgWidth, OUT cv::Mat& imgFilled);

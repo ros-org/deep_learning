@@ -1,3 +1,13 @@
+// ==========================================================
+// 实现功能：相机线程，实现读图、写图、转头等操作
+// 文件名称：CapProcess.hpp
+// 相关文件：无
+// 作   者：Liangliang Bai (liangliang.bai@leapting.com)
+// 版   权：<Copyright(C) 2023-Leapting Technology Co.,LTD All rights reserved.>
+// 修改记录：
+// 日   期             版本       修改人   走读人  
+// 2022.9.28          2.0.2      白亮亮
+// ==========================================================
 #ifndef __CAP_PROCESS_HPP__
 #define __CAP_PROCESS_HPP__
 
