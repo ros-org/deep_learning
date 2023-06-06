@@ -3,8 +3,8 @@
 """本模块用于把 labelme 标注的 json 文件转换为 YOLOv8 需要的 txt 格式，该
 txt 文件可以用于分割 instance segmentation 和检测 object detection 任务。
 
-版本号： 0.2
-日期： 2023-05-25
+版本号： 0.3
+日期： 2023-06-06
 作者： jun.liu@leapting.com
 """
 import json
@@ -109,17 +109,18 @@ def _get_rectangles_in_one_json(path_json, path_txts=None):
         # annotations_raw_dict['shapes'] 是一个列表，存放了所有分割的物体框。
         # 而每个多边形框，则是一个字典，包含的 key 为：(['label', 'points',
         # 'group_id', 'shape_type', 'flags'])
-        for i, each_annotation in enumerate(annotations_raw_dict['shapes']):
+        for j, each_annotation in enumerate(annotations_raw_dict['shapes']):
             label_name = each_annotation['label']
             # points 是一个列表，包含了一个矩形框的左上角和右下角点。
             points = each_annotation['points']
-            if label_name == "solar_panel":
+            # TODO 后续添加代码，处理多种识别目标
+            if label_name == "abnormal":  # solar_panel
                 f.write("0 ")  # 首位放入类别 ID
             else:
                 raise ValueError(f"Label name = {label_name}, need a new index.")
 
             # 矩形框只有 2 个点的坐标。
-            for i, point in enumerate(points):
+            for j, point in enumerate(points):
                 point_x = point[0]
                 point_y = point[1]
 
@@ -133,10 +134,10 @@ def _get_rectangles_in_one_json(path_json, path_txts=None):
                     point_y = 0
                     found_negative = True
 
-                if i == 0:  # 左上角点
+                if j == 0:  # 左上角点
                     top_left_x = point_x
                     top_left_y = point_y
-                elif i == 1:  # 右下角点
+                elif j == 1:  # 右下角点
                     bottom_right_x = point_x
                     bottom_right_y = point_y
 
@@ -173,7 +174,8 @@ def get_polygons_for_all_jsons(path_jsons, rectangle_diagonal,
 
     输入：
         path_jsons： 一个字符串，是标注文件 json 的存放路径。
-        rectangle_format (bool)： 一个字符串，是一个 labelme 标注，tlbr 格式为 Top Left，...标注文件 json 的存放路径。
+        rectangle_format (bool)： 一个字符串，是一个 labelme 标注或者 anylabeling 标注，
+            格式为 tlbr，即 Top Left，...标注文件 json 的存放路径。
 
         path_txts： 一个字符串，是用于存放新生成的 txt 文件的存放路径。
     """

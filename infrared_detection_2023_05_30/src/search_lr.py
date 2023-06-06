@@ -2,8 +2,10 @@
 # -*- coding utf-8 -*-
 """本模块用于确定最佳的 conf 和 iou 这 2 个参数。这组参数的组合，能够使得
 YOLOv8 模型在测试集上，得到最大的 mask mAP(50-95) 指标值。
-版本号： 0.1
-如需帮助，可联系 jun.liu@leapting.com
+
+版本号： 0.2
+日期： 2023-06-06
+作者： jun.liu@leapting.com
 """
 import os
 import pathlib
@@ -53,18 +55,6 @@ def load_record(records_name, show=True, sort_values=None, append_record=True):
         lr_records = pd.DataFrame({})
         counter_records = 0
 
-    # try:
-    #     lr_records = pd.read_csv(records_file)
-    #     # 用 index[-1] 找出 DataFrame 的最后一行索引。
-    #     counter_records = 1 + lr_records.index[-1]
-    #
-    #     if show:
-    #         show_sorted_record(lr_records)
-    #
-    # except FileNotFoundError:
-    #     lr_records = pd.DataFrame({})
-    #     counter_records = 0
-
     return lr_records, counter_records
 
 
@@ -75,7 +65,7 @@ def main(detect_data, batch_size=8, optimizer='SGD',
          epochs=5,
          lr_range=None, lr_numbers=5, linspace=True,
          lrf=1, imgsz=640,
-         val_split='train', conf=0.5, iou=0.7,
+         val_split='val', conf=0.5, iou=0.7,
          sort_values='mAP75', append_record=False,
          ):
     """创建一个 RegNet 模型，并且对其进行训练。 :class:`~torch.utils.data.DataLoader`
@@ -99,7 +89,7 @@ def main(detect_data, batch_size=8, optimizer='SGD',
     device = 0 if torch.cuda.is_available() else 'cpu'  # noqa
     print(f'using device: {device}')
 
-    # 时间格式 '0512'，前半部分为日期，后半部分为小时和分钟
+    # 时间格式 '0512'，为日期
     time_suffix = time.strftime('%m%d')
     # 如果有事先保存好的 lr_records，可以直接读取。
     records_name = f'search_lr/{records_name}_{time_suffix}.csv'
@@ -136,9 +126,10 @@ def main(detect_data, batch_size=8, optimizer='SGD',
             epochs=epochs, batch=batch_size, nbs=batch_size,
             device=device,
             imgsz=imgsz, plots=False,
-            val=False,  # 搜索超参时，不需要看验证集的指标，所以设为 False。
+            val=True,  # 搜索超参时，不需要看验证集的指标，所以设为 False。
             cache=True,  # 使用 cache 以加快速度。
             # amp=False,  # 不进行 AMP 检测。
+            workers=8,
         )
 
         metrics = model.val(split=val_split, batch=batch_size, plots=False,
@@ -175,7 +166,7 @@ def main(detect_data, batch_size=8, optimizer='SGD',
 @utilities.timer
 def predict_on_conf_iou(model_path=None, conf=None, iou=None,
                         show_boxes=False, save_txt=False, save_conf=False,
-                        tryout_images=None):
+                        tryout_images=None, task='predict'):
     """使用 YOLOv8 模型，对指定文件夹里的图片进行分割。
 
     Arguments:
@@ -199,25 +190,32 @@ def predict_on_conf_iou(model_path=None, conf=None, iou=None,
     print(f'Using model: {pathlib.Path(model_path).name}')
     model = YOLO(model_path)
 
+    tryout_images = pathlib.Path(tryout_images).expanduser().resolve()
     if tryout_images is None:
         tryout_images = r'../error_checking'
 
     device = torch.device(0) if torch.cuda.is_available() else torch.device(
         'cpu')  # noqa
     print(f'using device: {device}')
+    if task == 'predict':
+        results = model.predict(source=tryout_images,
+                                save=True,
+                                device=device,
+                                conf=conf,
+                                iou=iou,
+                                boxes=show_boxes,
+                                save_conf=save_conf,
+                                save_txt=save_txt,
+                                line_thickness=2,
+                                workers=8,  # workers 似乎不起作用
+                                )
+    elif task == 'validation':
 
-    results = model.predict(source=tryout_images,
-                            save=True,
-                            device=device,
-                            conf=conf,
-                            iou=iou,
-                            boxes=show_boxes,
-                            save_conf=save_conf,
-                            save_txt=save_txt,
-                            line_thickness=2,
-                            # retina_masks=True,  # 设置 mask 和原图大小一致。
-                            workers=8,  # workers 似乎不起作用
-                            )
+        metrics = model.val(split='val', plots=False,
+                            conf=conf, iou=iou)
+        print(f'map = {round(metrics.box.map, 3)}')
+        print(f'map50 = {round(metrics.box.map50, 3)}')
+        print(f'map75 = {round(metrics.box.map75, 3)}')
 
 
 if __name__ == '__main__':
@@ -227,25 +225,22 @@ if __name__ == '__main__':
     #              r'x44_Adam_lr1e-04_b4_e1200_degrees90_nbs64_close_mosaic100_conf0.5_iou0.79.pt'  # noqa
     detect_data = r'~/work/cv/2023_05_24_infrared/tryout/infrared.yaml'
 
-    main(detect_data=detect_data, records_name='lr_records', val_split='val',
-         model_type='x', imgsz=640,
-         optimizer='Adam', batch_size=4,
-         epochs=5, lr_range=(1.1e-5, 5e-6), lr_numbers=5, linspace=True,
-         append_record=True)
+    # main(detect_data=detect_data, records_name='lr_records', val_split='val',
+    #      model_type='x', imgsz=640,
+    #      optimizer='Adam', batch_size=4, epochs=5,
+    #      lr_range=(3.5e-4, 3.88e-4), lr_numbers=1, linspace=True,
+    #      append_record=True)
     #
 
-    # tryout_images = r'/home/leapting/work/cv/2023_02_24_yolov8/' \
-    #                   r'2023_03_08_labeling_solar_panel_black_portion_only/' \
-    #                   r'original images source/6. 2023-04-24 法兰泰克上采集的夜晚图片/pic20230424'  # noqa
-    # tryout_images = r'/home/leapting/work/cv/2023_02_24_yolov8/' \
-    #                 r'2023_03_08_labeling_solar_panel_black_portion_only/' \
-    #                 r'images/test'
+    tryout_images = r'~/work/cv/2023_05_24_infrared/dataset_solar_panel/images/test'
     # tryout_images = r'../error_checking'
-    #
-    # predict_on_conf_iou(model_path=model_path, conf=0.8, iou=0.75,  # conf=0.8, iou=0.75
-    #                     # save_conf=True, save_txt=True,
-    #                     # show_boxes=True,
-    #                     tryout_images=tryout_images)
+    model_path = r'runs/best.pt'
+    predict_on_conf_iou(model_path=model_path, conf=0.5, iou=0.7,  # conf=0.8, iou=0.75
+                        # save_conf=True, save_txt=True,
+                        # show_boxes=True,
+                        tryout_images=tryout_images,
+                        # task='validation',
+                        )
 
     # records_name = 'map_records.csv'
     # show_loaded_record(records_name, show=True, save=False)

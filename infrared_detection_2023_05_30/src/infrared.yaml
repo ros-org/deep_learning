@@ -7,7 +7,7 @@ test:  images/test # test images (optional)
 
 # Classes
 names:
-  0: solar_panel
+  0: abnormal  # solar_panel
 
 # Download script/URL (optional)
 # download: https://ultralytics.com/assets/coco128.zip

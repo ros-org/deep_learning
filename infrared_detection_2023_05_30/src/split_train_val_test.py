@@ -3,12 +3,11 @@
 """该模块用于把输入文件夹内的图片，按比例复制到 3 个文件夹： train, validation, test。主要适用于
  YOLOv8 的物体检测 object detection 任务。
 
-使用方法：终端运行 split_dataset(image_path, class_type='foreign_matter')????????????????????????????????????
-
+在分配到 3 个数据集之前，会先根据 json 标注文件，生成 txt 标签文件。
 默认的 train, validation, test 分配比例是 3:1:1 。可以手动修改这个比例值。
 
-版本号： 0.2
-日期： 2023-05-26
+版本号： 0.3
+日期： 2023-06-06
 作者： jun.liu@leapting.com
 """
 import os
@@ -41,10 +40,10 @@ def copy_one_file(each, processed, copied, tally,
     return processed, copied, tally
 
 
-def split_dataset(images_jsons_folder,
-                  ratio=(3, 1, 1), overwrite_annotations=True):
-    """把输入文件夹 :attr:`images_jsons_folder` 内的图片和标注文件，按比例复制到 3 个文件夹：
-    train, validation, test。
+def extract_txt_and_split_dataset(images_jsons_folder,
+                                  ratio=(3, 1, 1), overwrite_annotations=True):
+    """把 json 标注文件转换为 txt 标签文件，然后把输入文件夹 :attr:`images_jsons_folder` 内的图片和
+    txt 标签文件，按比例复制到 3 个文件夹：train, validation, test。
 
     Arguments:
         images_jsons_folder (str): 一个字符串，指向一个文件夹，其中放着 2 个文件夹，分别是 images 和 jsons。
@@ -75,7 +74,9 @@ def split_dataset(images_jsons_folder,
     if annotation_txts.exists() and overwrite_annotations:
         shutil.rmtree(annotation_txts)
     annotation_txts.mkdir()
-    get_polygons_for_all_jsons(path_jsons=raw_jsons, rectangle_diagonal=True, path_txts=annotation_txts)
+    # 把 json 标注文件转换为 txt 标签文件。
+    get_polygons_for_all_jsons(path_jsons=raw_jsons,
+                               rectangle_diagonal=True, path_txts=annotation_txts)
 
     # 新建 images_folder 和 labels_folder 文件夹，放在和 images_jsons_folder 同级的位置。
     images_folder = images_jsons_folder.parent / 'images'
@@ -112,25 +113,20 @@ def split_dataset(images_jsons_folder,
                            total=len(os.listdir(raw_images)), ncols=80)
     for each in sorted(tqdm_raw_images):  # iterdir 默认是乱序的，所以要用 sorted 。
         # 有子文件夹时，应该对子文件夹内的图片再次排序。 img_quantity 是图片数量，用 walrus 表达式得到。
-        if each.is_dir() and ((img_quantity := len(os.listdir(each))) > 0):
-            pass
-            # tqdm_each_dir = tqdm(each.iterdir(),
-            #                      total=img_quantity, ncols=80)
-            # for one_image in sorted(tqdm_each_dir):
-            #     processed, copied, tally = copy_one_image(
-            #         one_image, processed, copied, tally,
-            #         train_quantity, validation_quantity, test_quantity,
-            #         images_train, images_validation, images_test)
-        elif each.is_file():  # TODO： 后续考虑去掉这部分，即要求图片划分到子文件夹后，才把它们分配到数据集中。
+        if each.is_file():
             # 把图片对应的标签 txt 文件也放到相应文件夹
             each_annotation_name = each.stem + '.txt'
             each_annotation = annotation_txts / each_annotation_name
-            assert each_annotation.exists(), f'No annotation for {each} !'
-            copy_one_file(
-                each_annotation, processed, copied, tally, train_quantity,
-                validation_quantity, test_quantity,
-                train_dir=labels_train, validation_dir=labels_validation, test_dir=labels_test)
-            # 复制了标注之后，再计算 processed, tally 等数值，保证图片和标注的 tally 等始终一样。
+            if each_annotation.exists():  # 允许没有标注的图片存在，因为有时图片中确实没有物体
+                copy_one_file(
+                    each_annotation, processed, copied, tally, train_quantity,
+                    validation_quantity, test_quantity,
+                    train_dir=labels_train, validation_dir=labels_validation, test_dir=labels_test)
+            # else:
+            #
+            #     print(f'Allert, no annotation for {each} !')
+
+            # 复制了标签之后，再计算 processed, tally 等数值，保证图片和标注的 tally 等始终一样。
             processed, copied, tally = copy_one_file(
                 each, processed, copied, tally, train_quantity,
                 validation_quantity, test_quantity,
@@ -143,9 +139,9 @@ def split_dataset(images_jsons_folder,
 
 
 def main():
-    """对???????，把其中图片分成 3 个数据集。"""
-    images_jsons_folder = r'~/work/cv/2023_05_24_infrared/dataset_solar_panel/original_data'
-    split_dataset(images_jsons_folder=images_jsons_folder)
+    """生成 txt 标签文件，并把图片和标签分到 3 个数据集中。"""
+    images_jsons_folder = r'~/work/cv/2023_05_24_infrared/dataset_solar_panel/selected'
+    extract_txt_and_split_dataset(images_jsons_folder=images_jsons_folder)
 
 
 if __name__ == '__main__':
