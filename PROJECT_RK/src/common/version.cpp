@@ -5,7 +5,7 @@
 // 视觉框架版本号
 int getVisionFrameVersion(OUT char version[32])
 {
-    const char* visionFrame = "v2.0.3";
+    const char* visionFrame = "v3.0.0";
     memcpy(version, visionFrame, 32);
     return 0;
 }
@@ -41,7 +41,7 @@ int getSegmentationModelVersion(OUT char version[32])
 // 天气模型版本
 int getWeatherModelVersion(OUT char version[32])
 {
-    const char* weatherModelVersion = "v2.0.0";
+    const char* weatherModelVersion = "v3.0.0";
     memcpy(version, weatherModelVersion, 32);
     return 0;
 }
@@ -50,7 +50,7 @@ int getWeatherModelVersion(OUT char version[32])
 // 清洁度模型版本
 int getClealinessModelVersion(OUT char version[32])
 {
-    const char* clealinessModelVersion = "v2.0.0";
+    const char* clealinessModelVersion = "v3.0.0";
     memcpy(version, clealinessModelVersion, 32);
     return 0;
 }

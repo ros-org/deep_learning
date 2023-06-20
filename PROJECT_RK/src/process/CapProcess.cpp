@@ -26,7 +26,7 @@ int CapProcess::init()
 {
     m_start = false;                                                      //当是空图时为false则预测线程也不会取图成功，同时还可以保证每一张图至多被预测线程预测一次;
     m_bdebug = false;                                                     //控制图片来自本地还是摄像头(true:加载硬盘上的图片检测; false:从摄像头获取图片进行检测) 
-    m_interval = 20;                                                      //帧间隔，摄像头隔m_interval帧向缓存中放图
+    m_interval = 5;                                                       //帧间隔，摄像头隔m_interval帧向缓存中放图
     total_fram_num = 0;                                                   //总帧数初始化（从摄像头获取到的图的总帧数）
     mainThreadMsg = 255;                                                  //从主线程获取到的云台消息
 
@@ -42,11 +42,12 @@ int CapProcess::init()
     //----------------------------->云台控制参数初始化<-----------------------------//
 
     String source = "rtsp://admin:Litian123@192.168.1.108:554/cam/realmonitor?channel=1&subtype=0";
-    m_captrue.set(cv::CAP_PROP_BUFFERSIZE, 2);
-    m_captrue.set(cv::CAP_PROP_FOURCC, VideoWriter::fourcc('M', 'J', 'P', 'G'));    //视频流格式
     m_captrue.open(source);
     CHECK_EXPR(m_captrue.isOpened() == false,-1);
     cout << "CapProcess::init finished!" << endl; 
+    m_captrue.set(cv::CAP_PROP_BUFFERSIZE, 0);
+    m_captrue.set(cv::CAP_PROP_FOURCC, VideoWriter::fourcc('M', 'J', 'P', 'G'));    //视频流格式
+    m_captrue.set(cv::CAP_PROP_FPS, 25);
     pthread_mutex_init(&m_mutex,NULL);
     int res = pthread_create(&m_tid,NULL,start_thread,(void*)this);
 
@@ -182,14 +183,14 @@ void CapProcess::getMsgFromMainThread(INPUT unsigned char& signalValue)
         case 3:
         {
             ptzControl(740, 1000);     // 1P机器
-            // ptzControl(930, 80);  // 1.5P机器
+            // ptzControl(930, 1000);  // 1.5P机器
             break;
         }
 
         case 4:
         {
             ptzControl(2080, 1000);    // 1P机器
-            // ptzControl(2470, 80); // 1.5P机器
+            // ptzControl(2470, 1000); // 1.5P机器
             break;
         }
 
@@ -233,12 +234,11 @@ void CALLBACK CapProcess::HaveReConnect(long lLoginID, char *pchDVRIP, int nDVRP
 int CapProcess::start()
 {
     // 获取一次摄像头的图，得到其宽/高尺寸。摄像头宽高尺寸并不固定，所以最好不要手动写成固定的尺寸;
+    // Grap this error and write to log file
     m_captrue >> m_frame;
     if (m_frame.empty()) 
     {
         m_start = false;
-        std::cout<<"相机线程退出,请检查相机是否连接正确..."<<std::endl;
-        // Grap this error and write to log file
         return -1;
     }
     m_frame_h = m_frame.rows;
@@ -246,7 +246,6 @@ int CapProcess::start()
     m_frame_rcv = Mat::zeros(m_frame_h, m_frame_w, CV_8UC3);
     m_frame_run = Mat::zeros(m_frame_h, m_frame_w, CV_8UC3);
     m_frame_size = m_frame_h * m_frame_w * 3;
-
 
     Mat im_test_cap;
     int size;    
@@ -274,10 +273,11 @@ int CapProcess::start()
         if (m_frame.empty()) 
         {
             m_start = false;
-            std::cout<<"CapProcess.cpp:260:获取到空图----------------------------"<<std::endl;
+            std::cout<<"CapProcess.cpp:279:获取到空图----------------------------"<<std::endl;
             continue;
         }
-        total_fram_num++;                                        
+        total_fram_num++;
+        std::cout<<"相机线程获取到非空图:"<<total_fram_num<<std::endl;                                        
         
         //将离线图写入缓存
         if (m_bdebug == true) 
@@ -287,14 +287,15 @@ int CapProcess::start()
             m_start = true;
             pthread_mutex_unlock(&m_mutex);
         } 
-        //将在线图写入缓存
+        //将在线图写入缓存(忽略前10帧)
         else 
         {
-            if(total_fram_num % m_interval == 0)
+            if(total_fram_num % m_interval == 0 && total_fram_num>10)  
             {
                 pthread_mutex_lock(&m_mutex);
                 memcpy(m_frame_rcv.data, m_frame.data, m_frame_size);
                 m_start = true;
+                std::cout<<"相机线程将图像写入缓存......................"<<std::endl;
                 pthread_mutex_unlock(&m_mutex);
             }
         }

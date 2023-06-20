@@ -14,6 +14,7 @@
 //如果一个类内成员变量是static的，且需要将之设定为常量(const)，那么这个变量声明与初始化均可写在头文件内;
 //如果一个类内成员变量是static的，但不需要将其设定为常量(const)，那么这个变量声明于头文件内，初始化(定义/实现)写在对应的cpp源文件中;
 int Uart::m_waitFlag = -999;
+int uart_log = -999;
 
 
 
@@ -204,6 +205,29 @@ Uart::~Uart()
 
 
 
+// 函数功能：写消息线程日志到消息日志中
+// ----------------------------------->parameters<----------------------------------
+// inputParas :
+//     strMsg：待写入日志的的字符串信息;
+//     info:待写入日志的int值
+// outputParas:
+//     None
+// returnValue:None;
+// ----------------------------------->parameters<----------------------------------
+void writeLogInfo(IN const std::string& strMsg,  IN const int& info)
+{	
+    char* logBuff = new char[1024];
+    snprintf(logBuff,1024,"%s: %d;\n", strMsg.c_str(), info);
+    int nwrite = write(uart_log,logBuff,strlen(logBuff));
+    if(nullptr!=logBuff)
+    {
+        delete [] logBuff;
+        logBuff = nullptr;
+    }
+}
+
+
+
 // 函数功能：专门的初始化函数;
 // ----------------------------------->parameters<----------------------------------
 // inputParas :
@@ -214,6 +238,11 @@ Uart::~Uart()
 // ----------------------------------->parameters<----------------------------------
 int Uart::init()
 {
+    uart_log = open("/userdata/output/uart_debug.txt",O_RDWR | O_TRUNC | O_CREAT);
+    char *data = "Uart ..................................\n";
+    int size = strlen(data);
+    int nwrite = write(uart_log,data,strlen(data));
+    
     m_fd = open_port_v1(m_portName);                     //  "/dev/ttyS3", 串口3;如果是usb0："/dev/ttyusb0"
     CHECK_EXPR(m_fd < 0,-1);
     
@@ -338,7 +367,6 @@ int Uart::run()
         if(255!=m_messageFromMainThread[0] || 255!=m_messageFromMainThread[1] || 255!=m_messageFromMainThread[2] || 255!=m_messageFromMainThread[3])
         {
             pthread_mutex_lock(&m_uartMutex2);
-            
             send_to_stm32(m_messageFromMainThread, 4);
             i++;
             memset(m_messageFromMainThread, 255, 4);
@@ -497,7 +525,7 @@ int Uart::receive_base(unsigned char *pdata,int len)
 // ----------------------------------->parameters<----------------------------------
 void Uart::signal_handler_IO (INPUT int status)  
 {  
-    printf ("--------------signal_handler_IO:将要收到驱动版发来的消息---------------.\n");  
+    printf ("----signal_handler_IO:将要收到驱动版发来的消息-----.\n");  
     m_waitFlag = 0;  
 }  
 

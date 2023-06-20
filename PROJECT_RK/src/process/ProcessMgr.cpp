@@ -6,7 +6,7 @@
 // 版   权：<Copyright(C) 2023-Leapting Technology Co.,LTD All rights reserved.>
 // 修改记录：
 // 日   期             版本       修改人   走读人  
-// 2022.9.28          2.0.2      白亮亮
+// 2023.6.13          3.0.0      白亮亮
 
 // 修改记录：
 // 2023-05-24:检测到下坡，将发送1次消息改为发多次消息
@@ -21,11 +21,12 @@
 #include <numeric>
 #include <chrono>                       //用于测试时间，该方式更精准
 
-#define cameraPtzResetFrequence 200     //相机云台归零频率
-#define bridgeLengthThres 280           //桥架长度阈值
+#define cameraPtzResetFrequence 100     //相机云台归零频率
+#define bridgeLengthThres 300           //桥架长度阈值
 #define lowerBridgeLengthThres 250      //下坡类别目标长度
 #define ignoreDownBredgeInfo 100        //忽略下桥架消息次数
 #define minCt 500000                    //一次检测使用的最小时间，小于这个时间则阻塞
+#define saveImgFre 10                   //每获取saveImgFre张图保存一张
 
 using std::chrono::high_resolution_clock;
 using std::chrono::milliseconds;
@@ -61,7 +62,7 @@ int ProcessMgr::init()
         m_b_seg = false;
     }
     m_b_weatherClassification = true;                            // 是否运行天气分类
-    m_b_cla = false;                                             // 清洁度分类标志
+    m_b_cla = false;                                              // 清洁度分类标志
     minCleannessValue = 10.f;                                    // 清洁度最小值
     maxCleannessValue = 90.f;                                    // 清洁度最大值
 
@@ -313,7 +314,7 @@ int ProcessMgr::run()
         if(bSaveOrgImage)
         {
             std::string imageDir = "/userdata/autoImageAcq/";
-            saveImage(imageDir, frame, cnt, 4);
+            saveImage(imageDir, frame, cnt, saveImgFre);
         }
         //----------------->1、从缓存区获取图像并保存原始图像<------------------//
 
@@ -340,6 +341,7 @@ int ProcessMgr::run()
         writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[1]);
         writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[2]);
         writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[3]);
+        // std::cout<<"主线程发给消息线程的消息:"<<int(msgsTomsgThread[0])<<"  "<<int(msgsTomsgThread[1])<<"  "<<int(msgsTomsgThread[2])<<"  "<<int(msgsTomsgThread[3])<<std::endl;
         if(detInfo == msgsTomsgThread[3] || segInfo == msgsTomsgThread[3])
         {
             //上次检测到断裂，掉头运行需要先减速，减速日时阻塞一段时间直到返回到第一次检到测断裂的位置之外
@@ -414,6 +416,11 @@ int ProcessMgr::run()
             
             // 4.2天气分类推理
             int ret = mCla_weather.run(chwImgWeather, "CHW", classifyRes);
+            writeMsgToLogfile2("xxxxxxxx:", classifyRes);    //强制修改分类结果，将类别3置为0；
+            if(classifyRes == 3)
+            {
+                classifyRes = 0;
+            }
             if(0 != ret)
             {
                 std::cout<<"天气模型推理异常,请检查..."<<std::endl;
@@ -646,14 +653,14 @@ int ProcessMgr::run()
             if(bridgeNum>0)
             {
                 bridgeNumWeights[2] =1;
-                writeMsgToLogfile2("------------------------------------检测到桥架-------------------------------------", 0);
-                std::cout<<"------------------------------------检测到桥架-------------------------------------"<<std::endl;
+                writeMsgToLogfile2("-----------------------------------------已检测到桥架------------------------------------------", 0);
+                std::cout<<"-----------------------------------------已检测到桥架------------------------------------------"<<std::endl;
             }
             else
             {
                 bridgeNumWeights[2] =0;
-                writeMsgToLogfile2("---------未检测到桥架---------", 0);
-                std::cout<<"---------未检测到桥架---------"<<std::endl;
+                writeMsgToLogfile2("----未检测到桥架----", 0);
+                std::cout<<"----未检测到桥架----"<<std::endl;
             }
 
             // 6.8、本轮(连续三次检测有两次检测到桥架区域)检测到桥架则启动检测模型2、裁图；
@@ -921,9 +928,11 @@ int ProcessMgr::run()
         std::cout<<"Running time: "<<timeInterval.count()<<"ms"<<std::endl;
 
         //9.2、阻塞主线程（当主线程运行一次的时间小于300ms，则阻塞）
-        if(timeInterval.count()<minCt)
+        if(timeInterval.count()*1000<minCt)
         {
-            usleep(minCt-timeInterval.count());  //注意：usleep单位是微妙
+            std::cout<<"检测时间太快，睡眠 "<<minCt-timeInterval.count()*1000<<"us"<<std::endl;
+            usleep(minCt-timeInterval.count()*1000);  //注意：usleep单位是微妙
+            std::cout<<"检测时间太快，睡眠结束"<<std::endl;
         }
         //-------------------------->9、阻塞主线程<--------------------------//            
     }

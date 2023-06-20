@@ -579,7 +579,7 @@ int fuzzyImgJudge_SMD(IN const std::string& imgPath, IN const std::string& imgSa
 	string meanValueString;
 	meanValueStream << result;
 	meanValueStream >> meanValueString;
-	meanValueString = "Articulation(Variance Method): " + meanValueString;
+	meanValueString = "Articulation(SMD Method): " + meanValueString;
 
 	putText(srcImg, meanValueString, Point(20, 50), cv::FONT_HERSHEY_COMPLEX, 0.8, Scalar(255, 255, 25), 2);
     cv::imwrite(newImagePath, srcImg);
@@ -652,7 +652,7 @@ int fuzzyImgJudge_Brenner(IN const std::string& imgPath, IN const std::string& i
 	string meanValueString;
 	meanValueStream << result;
 	meanValueStream >> meanValueString;
-	meanValueString = "Articulation(Variance Method): " + meanValueString;
+	meanValueString = "Articulation(Brenner Method): " + meanValueString;
 
 	putText(srcImg, meanValueString, Point(20, 50), cv::FONT_HERSHEY_COMPLEX, 0.8, Scalar(255, 255, 25), 2);
     cv::imwrite(newImagePath, srcImg);
@@ -728,7 +728,7 @@ int fuzzyImgJudge_SMD2(IN const std::string& imgPath, IN const std::string& imgS
 	string meanValueString;
 	meanValueStream << result;
 	meanValueStream >> meanValueString;
-	meanValueString = "Articulation(Variance Method): " + meanValueString;
+	meanValueString = "Articulation(SMD2 Method): " + meanValueString;
 
 	putText(srcImg, meanValueString, Point(20, 50), cv::FONT_HERSHEY_COMPLEX, 0.8, Scalar(255, 255, 25), 2);
     cv::imwrite(newImagePath, srcImg);
@@ -804,7 +804,7 @@ int fuzzyImgJudge_energyGradient(IN const std::string& imgPath, IN const std::st
 	string meanValueString;
 	meanValueStream << result;
 	meanValueStream >> meanValueString;
-	meanValueString = "Articulation(Variance Method): " + meanValueString;
+	meanValueString = "Articulation(Energy gradient Method): " + meanValueString;
 
 	putText(srcImg, meanValueString, Point(20, 50), cv::FONT_HERSHEY_COMPLEX, 0.8, Scalar(255, 255, 25), 2);
     cv::imwrite(newImagePath, srcImg);
@@ -880,7 +880,7 @@ int fuzzyImgJudge_eav(IN const std::string& imgPath, IN const std::string& imgSa
 	string meanValueString;
 	meanValueStream << result;
 	meanValueStream >> meanValueString;
-	meanValueString = "Articulation(Variance Method): " + meanValueString;
+	meanValueString = "Articulation(Eav Method): " + meanValueString;
 
 	putText(srcImg, meanValueString, Point(20, 50), cv::FONT_HERSHEY_COMPLEX, 0.8, Scalar(255, 255, 25), 2);
     cv::imwrite(newImagePath, srcImg);
@@ -1093,7 +1093,7 @@ int blurNoiseIQA(IN const std::string& imgPath, IN const std::string& imgSaveDir
 	string meanValueString;
 	meanValueStream << result;
 	meanValueStream >> meanValueString;
-	meanValueString = "Articulation(Variance Method): " + meanValueString;
+	meanValueString = "Articulation(NoiseIQA Method): " + meanValueString;
 
 	putText(image, meanValueString, Point(20, 50), cv::FONT_HERSHEY_COMPLEX, 0.8, Scalar(255, 255, 25), 2);
     cv::imwrite(newImagePath, image);
@@ -1126,8 +1126,8 @@ int test_blurNoiseIQA(IN const std::string& imgDir, IN const std::string& imgSav
 
 int main()
 {
-    std::string imgPath = "./testImage/1.png";            //待裁剪图路径
-    testAdaptiveCropImg(imgPath);                         //测试自动切图功能
+    // std::string imgPath = "./testImage/1.png";         //待裁剪图路径
+    // testAdaptiveCropImg(imgPath);                      //测试自动切图功能
 
     std::string imgDir = "/userdata/data/";               //待测试图所在文件夹
     std::string imgSaveDir = "/userdata/test_dir/";       //测试后的效果图保存文件夹
@@ -1142,6 +1142,21 @@ int main()
     // fuzzyImgJudgeTest_Laplacian(imgDir, imgSaveDir);   //模糊图判断-Laplacian求梯度方法 测试函数
     
     // fuzzyImgJudgeTest_Variance(imgDir, imgSaveDir);    //模糊图判断-Variance求方差方法 测试函数
+     
+    // 这种方式有效果，但是计算时间太长，几乎1s1张；
+    // test_blurNoiseIQA(imgDir, imgSaveDir);             //模糊图判断-blurNoiseIQA 测试函数
+
+    // fuzzyImgJudgeTest_eav(imgDir, imgSaveDir);
+
+    // fuzzyImgJudgeTest_energyGradient(imgDir, imgSaveDir);
+
+    // fuzzyImgJudgeTest_SMD2(imgDir, imgSaveDir);
+
+    // fuzzyImgJudgeTest_Brenner(imgDir, imgSaveDir);
+
+    fuzzyImgJudgeTest_SMD(imgDir, imgSaveDir);
+    
+
     std::cout<<"测试结束."<<std::endl;
 }
 
