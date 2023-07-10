@@ -25,8 +25,9 @@ def show_sorted_record(lr_records: pd.DataFrame, sort_values: str, first_quantit
         by=sort_values, ascending=False)[: 90]
     # 显示前 first_quantity 位。
     # pd.set_option('display.max_rows', first_quantity)
-    np.set_printoptions(threshold=first_quantity, precision=12)
-    print(f'validation {sort_values}: \n{lr_records}\n')
+    pd.set_option('display.max_columns', None)  # 显示所有列。
+    np.set_printoptions(threshold=first_quantity, precision=8)
+    print(f'Sorting by: {sort_values}: \n{lr_records}\n')
 
 
 def load_record(records_name, show=True, sort_values=None, append_record=True):
@@ -38,7 +39,6 @@ def load_record(records_name, show=True, sort_values=None, append_record=True):
     if records_file.exists():
         if append_record:
             print(f'Using previous: {records_file} .')
-
             lr_records = pd.read_csv(records_file)
             # 用 index[-1] 找出 DataFrame 的最后一行索引。
             counter_records = 1 + lr_records.index[-1]
@@ -121,15 +121,17 @@ def main(detect_data, batch_size=8, optimizer='SGD',
             data=str(detect_data),  patience=0,  # 注意 data 参数必须输入字符串。
             optimizer=optimizer,
             lr0=lr,
+            name=f'search_lr_{lr:.2e}',  # 设定名字，查看 TensorBoard 时方便对比
             lrf=lrf,  # 设置 lrf 为 1， 搜索学习率时，不使用学习率衰减。
             epochs=epochs, batch=batch_size, nbs=batch_size,
             device=device,
             imgsz=imgsz, plots=False,
             # val=True,
-            cache=True,  # 使用 cache 以加快速度。
+            # cache=True,  # 搜索超参时，使用 cache 并不一定会加快速度，因为 cache 也要时间。
             amp=False,  # 不进行 AMP 检测。
             workers=8,
             conf=conf, iou=iou,
+            cache=True,  # use cache to speed up 2.3 times faster
         )
         # 验证之前清理一下显存，以免发生 out of memory error. 但是似乎没用？
         torch.cuda.empty_cache()
@@ -185,8 +187,8 @@ def predict_on_conf_iou(model_path=None, conf=None, iou=None,
     if model_path is None:
         # x31_Adam_lr1e-03_b4_e1200_degrees90_nbs64_close_mosaic100
         model_path = r'/media/drin/shared_disk/work/cv/2023_02_24_yolov8/' \
-                             r'auto_labeling/trained_models/' \
-                             r'x33_Adam_lr1e-03_b4_e1200_degrees90_nbs64_close_mosaic100_hsv_v0.4.pt'  # noqa
+                     r'auto_labeling/trained_models/' \
+                     r'x33_Adam_lr1e-03_b4_e1200_degrees90_nbs64_close_mosaic100_hsv_v0.4.pt'  # noqa
 
     print(f'Using model: {pathlib.Path(model_path).name}')
     model = YOLO(model_path)
@@ -228,10 +230,8 @@ if __name__ == '__main__':
     main(detect_data=detect_data, records_name='lr_records', val_split='val',
          model_type='x', imgsz=640,
          sort_values='mAP50',
-         optimizer='Adam', batch_size=2, epochs=5,
-         lr_range=(2e-5, 1e-6), lr_numbers=3, linspace=False,
-         append_record=True)
-    #
+         optimizer='Adam', batch_size=2, epochs=20,
+         lr_range=(1.2e-5, 2e-6), lr_numbers=1, linspace=True, append_record=True)
 
     # tryout_images = r'/media/drin/shared_disk/work/cv/2023_05_24_infrared/dataset_solar_panel/images/test'
     # # tryout_images = r'../error_checking'

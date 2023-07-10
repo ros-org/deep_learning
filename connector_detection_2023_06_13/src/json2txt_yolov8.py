@@ -3,8 +3,8 @@
 """本模块用于把 labelme 标注的 json 文件转换为 YOLOv8 需要的 txt 格式，该
 txt 文件可以用于分割 instance segmentation 和检测 object detection 任务。
 
-版本号： 0.3
-日期： 2023-06-06
+版本号： 0.4
+日期： 2023-06-15
 作者： jun.liu@leapting.com
 """
 import json
@@ -14,6 +14,8 @@ import shutil
 import sys
 
 from tqdm import tqdm
+
+import parsing_yaml
 
 
 def _get_polygons_in_one_json(path_json, path_txts=None):
@@ -81,16 +83,16 @@ def _get_polygons_in_one_json(path_json, path_txts=None):
             f.write('\n')  # 每个多边形，必须以换行 \n 结束。
 
 
-def _get_rectangles_in_one_json(path_json, path_txts=None):
+def _get_rectangles_in_one_json(path_json, yaml_path, path_txts=None):
     """把一个 json 文件内所有的矩形标注提取出来，生成一个 txt 文件。
 
     Args：
         path_json (str)： 一个字符串，是一个标注文件 json 的存放路径。
+        yaml_path (str)： 一个字符串，指向 YOLOv8 的 yaml 数据文件。
         path_txts (str)： 一个字符串，是用于存放新生成的 txt 文件的存放路径。
     """
     try:
         with open(path_json) as f:
-            print(f'debug 1, {path_json= }')
             annotations_raw_dict = json.load(f)
     except FileNotFoundError:
         print(f'File not found: {path_json}')
@@ -104,6 +106,9 @@ def _get_rectangles_in_one_json(path_json, path_txts=None):
     txt_file_name = path_json.stem + ".txt"  # 新生成的 txt 文件名
     txt_file = path_txts / txt_file_name  # txt 的路径
 
+    # 获取类别名字和类别 id 的对应关系。
+    category_id_mapping = parsing_yaml.parsing_yaml(yaml_path)
+
     found_negative = False
     # 把每一个物体框的点记录到 txt_file 中。
     with open(txt_file, 'w') as f:
@@ -114,11 +119,18 @@ def _get_rectangles_in_one_json(path_json, path_txts=None):
             label_name = each_annotation['label']
             # points 是一个列表，包含了一个矩形框的左上角和右下角点。
             points = each_annotation['points']
-            # TODO 后续添加代码，处理多种识别目标
-            if label_name == "disconnected":  # TODO: 后续把 label_name 作为参数。 solar_panel abnormal
-                f.write("0 ")  # 首位放入类别 ID
-            else:
-                raise ValueError(f"Label name = {label_name}, need a new index.")
+            # TODO 后续添加代码，处理多种识别目标 这里必须和 yaml 文件一致。
+            try:
+                label_id = category_id_mapping[label_name]
+                info_to_write = str(label_id) + ' '  # 把 label id 写入，并且要加上一个空格
+                f.write(info_to_write)
+            except KeyError:  # 没有找到这个 key（即类别名字），则进行报错。
+                print(f'Current {category_id_mapping= }')
+                raise KeyError(f"Label name = {label_name}, but it's not found in category_id_mapping.")
+            # if label_name == "disconnected":  # TODO: 后续把 label_name 作为参数。 solar_panel abnormal
+            #     f.write("0 ")  # 首位放入类别 ID
+            # else:
+            #     raise ValueError(f"Label name = {label_name}, need a new index.")
 
             # 矩形框只有 2 个点的坐标。
             for j, point in enumerate(points):
@@ -169,7 +181,7 @@ def _get_rectangles_in_one_json(path_json, path_txts=None):
             f.write('\n')  # 每个物体框，必须以换行 \n 结束。
 
 
-def get_polygons_for_all_jsons(path_jsons, rectangle_diagonal,
+def get_polygons_for_all_jsons(path_jsons, rectangle_diagonal, yaml_path,
                                path_txts=None, overwrite_txt=True):
     """对文件夹内每一个 json 标注文件，提取所有多边形标注，生成一个 txt 文件。
 
@@ -177,7 +189,7 @@ def get_polygons_for_all_jsons(path_jsons, rectangle_diagonal,
         path_jsons： 一个字符串，是标注文件 json 的存放路径。
         rectangle_format (bool)： 一个字符串，是一个 labelme 标注或者 anylabeling 标注，
             格式为 tlbr，即 Top Left，...标注文件 json 的存放路径。
-
+        yaml_path (str)： 一个字符串，指向 YOLOv8 的 yaml 数据文件。
         path_txts： 一个字符串，是用于存放新生成的 txt 文件的存放路径。
     """
     path_jsons = pathlib.Path(path_jsons).expanduser().resolve()
@@ -197,14 +209,14 @@ def get_polygons_for_all_jsons(path_jsons, rectangle_diagonal,
     # 循环，逐个提取。
     if path_jsons.is_file():
         if rectangle_diagonal:
-            _get_rectangles_in_one_json(path_json=path_jsons, path_txts=path_txts)
+            _get_rectangles_in_one_json(path_json=path_jsons, yaml_path=yaml_path, path_txts=path_txts)
         else:
             _get_polygons_in_one_json(path_json=path_jsons, path_txts=path_txts)
     else:
         tqdm_iterator = tqdm(path_jsons.iterdir(), total=len(os.listdir(path_jsons)), ncols=80)
         for one_path in tqdm_iterator:
             if rectangle_diagonal:
-                _get_rectangles_in_one_json(path_json=one_path, path_txts=path_txts)
+                _get_rectangles_in_one_json(path_json=one_path, yaml_path=yaml_path, path_txts=path_txts)
             else:
                 _get_polygons_in_one_json(path_json=one_path, path_txts=path_txts)
 
