@@ -30,15 +30,15 @@ def train_on_solar_panel(configurations=None,
     if configurations is None:
         configurations = {}
     model_path = configurations.get(
-        'model_path', r'/media/disk_2/work/cv/2023_06_07_connector/pretrained_models/yolov8x.pt')
+        'model_path', r'/home/leapting/liuj/2023_06_07_connector/pretrained_models/yolov8x.pt')
     model_path = pathlib.Path(model_path).expanduser().resolve()
     print(f'{model_path= }')
 
-    target_model_path = r'/media/disk_2/work/cv/2023_06_07_connector/pretrained_models'
+    target_model_path = r'/home/leapting/liuj/2023_06_07_connector/pretrained_models'
     target_model_path = pathlib.Path(target_model_path).expanduser().resolve()
 
     detect_data = configurations.get(
-        'detect_data', r'/media/disk_2/work/cv/2023_06_07_connector/tryout/src/connector.yaml')
+        'detect_data', r'/home/leapting/liuj/2023_06_07_connector/tryout/src/connector.yaml')
     detect_data = pathlib.Path(detect_data).expanduser().resolve()
 
     # 注意 YOLOv8.0.53 版本有问题，下面 device 的写法，在 train 和 predict 不同，
@@ -95,10 +95,12 @@ def train_on_solar_panel(configurations=None,
     # conf 和 iou 仅用于一个训练 epoch 结束之后，进行验证 val 时起作用。
     conf = configurations.get('conf', 0.5)
     iou = configurations.get('iou', 0.7)  # 老的 YOLOv8 版本，iou 为 0.7，现在新的为 0.6。
+    cls = configurations.get('cls', 0.5)  # 默认为 0.5
+    shear = configurations.get('shear', 0)  # 默认为 0。mosaic 参数测试，默认值 1 最好。
 
     experiment_name = f'{model_id}_{optimizer}_lr{lr0:.2e}_lrf{lrf:.2f}_conf{conf}_iou{iou}' \
                       f'_b{batch}_e{epochs}_nbs{nbs}_imgsz{imgsz}_hsv{hsv_h}_close_mos{close_mosaic}' \
-                      f'_deg{degrees}_scale{scale}'
+                      f'_deg{degrees}_scale{scale}_cls{cls}_shear{shear}'
                       # f'_hsv'  # \
 
     model = YOLO(model_path)  # model_path
@@ -118,6 +120,8 @@ def train_on_solar_panel(configurations=None,
         imgsz=imgsz,
         degrees=degrees,
         nbs=nbs,
+        cls=cls,
+        shear=shear,
         # perspective=perspective,
         # shear=shear,
         # rect=rect,
@@ -148,7 +152,7 @@ def train_on_solar_panel(configurations=None,
     )
 
     # 加载训练好的最佳模型，检查其 mAP50 指标。
-    best_model_path = f'runs/detect/{experiment_name}/weights/best.pt'  # 模型的默认保存路径。
+    best_model_path = f'runs/detect/{experiment_name}/weights/best.pt'  # 模型的默认保存路径。使用 ckpt_path?
     best_model_path = pathlib.Path(best_model_path).expanduser().resolve()
     best_model = YOLO(best_model_path)
 
@@ -180,7 +184,7 @@ def train_on_solar_panel(configurations=None,
 
 
 @utilities.timer
-def get_prediction_result(model_path, tryout_images, conf=0.5, iou=0.7, imgsz=640,
+def get_prediction_result_old(model_path, tryout_images, conf=0.5, iou=0.7, imgsz=640,
                           agnostic_nms=True, save=True):
     """查看预测的输出结果。"""
     model_path = pathlib.Path(model_path).expanduser().resolve()
@@ -190,7 +194,8 @@ def get_prediction_result(model_path, tryout_images, conf=0.5, iou=0.7, imgsz=64
     model_name = model_path.stem.split('_')[0]  # 取名字第一个下划线的前面部分即可
 
     model = YOLO(model_path)  # 加载训练好的模型
-    # print(f'{model.overrides = }\n')  # 是自定义的信息，包括 yaml 文件的路径，以及 imgsz 等。
+    print(f'{model.overrides = }\n')  # 是自定义的信息，包括 yaml 文件的路径，以及 imgsz 等。
+    raise ValueError('debugging')
 
     tryout_images = pathlib.Path(tryout_images).expanduser().resolve()
     if not tryout_images.exists():
@@ -240,6 +245,54 @@ def get_prediction_result(model_path, tryout_images, conf=0.5, iou=0.7, imgsz=64
         #     break
 
 
+@utilities.timer
+def get_prediction_result(model_path, tryout_images, conf=0.5, iou=0.7, imgsz=640,
+                          agnostic_nms=True,
+                          half=False, save=True, simplify_names=True):
+    """查看预测的输出结果。
+
+    Arguments:
+        simplify_names (bool): 一个布尔值，如果为 True，则在预测的结果图片中，把预测的名字进行简化。
+    """
+    model_path = pathlib.Path(model_path).expanduser().resolve()
+    if not model_path.exists():
+        raise FileNotFoundError(f'Model not found: {model_path}')
+    print(f'{model_path= }')
+
+    model = YOLO(model_path)  # 加载训练好的模型
+    if simplify_names:
+        model.names[0] = 'disc'  # 把 disconnected 简化为 disc
+        model.names[1] = 'con'  # 把 connected 简化为 con
+
+    # yaml_file = r'/home/leapting/liuj/2023_06_07_connector/tryout/src/connector_random_test.yaml'
+    # model.overrides['data'] = yaml_file
+    # print(f'{model.overrides = }\n')  # 是自定义的信息，包括 yaml 文件的路径，以及 imgsz 等。
+
+    tryout_images = pathlib.Path(tryout_images).expanduser().resolve()
+    if not tryout_images.exists():
+        raise FileNotFoundError(f'Images not found: {tryout_images}')
+
+    device = torch.device(0) if torch.cuda.is_available() else torch.device('cpu')  # noqa
+    print(f'using device: {device}')
+
+    # 时间格式 '230620_1016'，前半部分为日期，后半部分为小时和分钟
+    time_stamp = time.strftime('%y%m%d_%H%M')
+    model_name = model_path.stem.split('_')[0]  # 取名字第一个下划线的前面部分即可
+    predict_name = f'predict_{model_name}_{time_stamp}_imgsz{imgsz}_conf{conf}_iou{iou}'  # 预测结果将保存在 predict_name 这个文件夹中
+    # source 可以是字符串、数组或张量等。
+    # 注意 model.predict 中可以设置 imgsz 参数，但是在 model.val 方法中设置 imgsz 无效。
+    results = model.predict(source=tryout_images, device=device,
+                            conf=conf, iou=iou,
+                            save=save,
+                            # line_width=3
+                            workers=8,  # workers 似乎不起作用
+                            name=predict_name,  # 记录下名字，以便查看结果
+                            imgsz=imgsz,  # 记录下名字，以便查看结果
+                            half=half,
+                            agnostic_nms=agnostic_nms,
+                            )
+
+
 def test_best_model(best_model_path, conf, iou, agnostic_nms, imgsz, batch_size=1, half=False):
     """test and val on best model.
     """
@@ -251,7 +304,7 @@ def test_best_model(best_model_path, conf, iou, agnostic_nms, imgsz, batch_size=
     if best_model_path.suffix in ['.engine', '.onnx']:
         # 使用 engine 推理时，必须设置 imgsz，data 和 task，且 data 必须为字符串。
         # half 参数对 TensorRT 推理没有影响，所以在 val 方法中直接去掉。
-        detect_data = r'/media/disk_2/work/cv/2023_06_07_connector/tryout/src/connector.yaml'
+        detect_data = r'/home/leapting/liuj/2023_06_07_connector/tryout/src/connector.yaml'
         metrics_validation = best_model.val(split='val', save=False,
                                             agnostic_nms=agnostic_nms, batch=batch_size,
                                             conf=conf, iou=iou, imgsz=imgsz,
@@ -310,45 +363,56 @@ def export_yolo(model_path, format='engine', half=False, workspace=8):
 
 
 if __name__ == '__main__':
-    configurations = {'model_id': r'exp70',  # x22-connector exp61
-                      # 'model_path': None,
-                      # 'detect_data': 'coco128.yaml',
-                      'conf': 0.5,
-                      'iou': 0.7,
-                      'batch': 2,  # 4
-                      'imgsz': 1088,  # 480 1280  应该是 32 的倍数.
-                      'hsv_h': 0.8,  # 0.2
-                      'hsv_s': 0.8,  # 0.2
-                      'hsv_v': 0.8,
-                      'close_mosaic': 1,
-                      'degrees': 7,
-                      'scale': 0.5,
-                      # 'nbs': 16,
-                      'optimizer': 'Adam',
-                      'lr0': 1.08e-5,  # 1.08e-5  8e-5
-                      'lrf': 0.01,  # 'lrf': 1
-                      'epochs': 25}  # 500
-    train_on_solar_panel(configurations=configurations)  # 训练模型
+    # names = 'x38-connector', 'x39-connector'  # 'exp59''exp46',  x37-connector
+    name_id = 44
+    lrf_list = 0.1,  # 0.01  4, 6, 7
+    nbs_list = 1,  # 5
+    close_mosaic_list = 1,  # 3  # 5
+    for close_mosaic in close_mosaic_list:
+        for nbs in nbs_list:
+            name = f'x{name_id}-connector'
+            # name = f'exp{name_id}'
+            name_id += 1
+            print(f'{name= }, {close_mosaic= }, {nbs= }')
+            configurations = {'model_id': name,  # x37-connector exp42
+                              # 'model_path': None,
+                              # 'detect_data': 'coco128.yaml',
+                              'conf': 0.5,
+                              'iou': 0.7,
+                              'batch': 8,  # 4
+                              'imgsz': 1088,  # 480 1280  应该是 32 的倍数.
+                              'hsv_h': 0.8,  # 0.2 hue
+                              'hsv_s': 0.8,  # 0.2 saturation
+                              'hsv_v': 0.8,  # value
+                              'close_mosaic': close_mosaic,  #
+                              'degrees': 7,
+                              'scale': 0.5,
+                              'cls': 1,  # 0.99
+                              'shear': 2,  #
+                              'nbs': nbs,  # 5
+                              'optimizer': 'Adam',
+                              'lr0': 1.08e-5,  # 1.08e-5  8e-5
+                              'lrf': 0.1,  # 'lrf': 0.01
+                              'epochs': 800}  # 500 35
+            train_on_solar_panel(configurations=configurations)  # 训练模型
 
-    # 用训练好的模型对测试集图片进行预测 dx007_Adam_lr1.08e-05_lrf0.01_conf0.5_iou0.7_b4_e8000_nbs4_val914_test890
-    model_path = r'/media/disk_2/work/cv/2023_06_07_connector/pretrained_models/' \
-                 r'x22-connector_Adam_lr1.08e-05_lrf0.01_conf0.5_iou0.7_b2_e500_nbs2_imgsz1088_hsv0.8_close_mosaic1_deg0_val945_test924.pt'  # noqa
-                 # r'dx014_Adam_lr1.08e-05_lrf0.01_conf0.5_iou0.7_b2_e550_nbs2_imgsz1088_hsv-v0.8_hsv-h0.2_val971_test962_FP16.engine'  # noqa
+    # 用训练好的模型对测试集图片进行预测
+    model_path = r'/home/leapting/liuj/2023_06_07_connector/pretrained_models/' \
+                 r'x36-connector_Adam_lr1.08e-05_lrf0.01_conf0.5_iou0.7_b8_e500_nbs8_imgsz1088_hsv0.8_close_mos1_deg7_scale0.5_cls1_shear2_val933_test930.pt'  # noqa
     # export_yolo(model_path, format='engine', half=True)
-    # test_best_model(best_model_path=model_path, batch_size=2,
+    # test_best_model(best_model_path=model_path, batch_size=8,
     #                 half=False, imgsz=1088,  # 1088
     #                 conf=0.5, iou=0.7, agnostic_nms=True)  # test and validate on the best model
 
-    tryout_images = r'/media/disk_2/work/cv/2023_06_07_connector/dataset_connector/images/' \
-                    r'test'  # validation test
-    # tryout_images = r'/media/disk_2/work/cv/2023_06_07_connector/videos/captured_frames_高清'
-    tryout_images = r'/media/disk_2/work/cv/2023_06_07_connector/documents/2023-07-05 测光方式对比'
-    # tryout_images = r'/media/disk_2/work/cv/2023_06_07_connector/dataset_connector/' \
+    tryout_images = r'/home/leapting/liuj/2023_06_07_connector/dataset_connector/images/validation'  # validation test
+    # tryout_images = r'/home/leapting/liuj/2023_06_07_connector/dataset_connector/images/random_test_zoomed'  # test
+    # tryout_images = r'/home/leapting/liuj/2023_06_07_connector/documents/2023-07-05 测光方式对比'
+    # tryout_images = r'/home/leapting/liuj/2023_06_07_connector/dataset_connector/' \
     #                 r'original_data/2023-06-18 湖州图片/images'
     # # # # TODO: 给推理程序 get_prediction_result 加上解码名字的部分，确保 conf，iou 等参数设置正确。
     # get_prediction_result(model_path=model_path, tryout_images=tryout_images,
     #                       imgsz=1088,  # default imgsz=640
-    #                       conf=0.5,  # default 0.25 predict, 0.001 val
-    #                       iou=0.7,
+    #                       conf=0.5,  # default 0.25 predict, 0.001 val confidence
+    #                       iou=0.7,  # iou intersection over union
     #                       agnostic_nms=True)  # 0.71 0.7。
 
