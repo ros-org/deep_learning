@@ -32,7 +32,7 @@ adb push build/bin/* /userdata                                                  
 # adb push models/detection2.rknn /userdata/models/                                # 将检测模型2 push到models文件夹下
 # adb push models/segmentation.rknn /userdata/models/                              # 将分割模型push到models文件夹下
 # adb shell "mkdir -p /userdata/data"                                              # 在开发板上创建data文件夹
-# adb push data1/*.jpg /userdata/data/                                             # 在data文件夹中push一张测试图用于离线测试
+# adb push data/*.jpg /userdata/data/                                             # 在data文件夹中push一张测试图用于离线测试
 # adb shell "mkdir -p /userdata/img_cropped/"                                      # 创建文件夹，存放检测切好的图
 # ------------------------------------》创建一个文件夹并将模型文件push到开发板《------------------------------------- #
 

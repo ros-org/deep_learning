@@ -163,8 +163,8 @@ int testDetection1(IN const std::string& imgDir, IN const std::string& imgSaveDi
     //图像预处理 
     int infeSuccessImgIdx = 0;
     int croppedSccessImgNum = 0;
-    int bridgeLengthThres = 200;
-    int lowerBridgeLengthThres = 200;
+    int bridgeLengthThres = 100;
+    int lowerBridgeLengthThres = 100;
     vector<float *> res;
     uint8_t chwImgDet[3*m_p_yolo_cfg->feed_w*m_p_yolo_cfg->feed_h]; 
     cv::Mat frame,im_detect, im_detect_resized, im_detect_rgb;
@@ -224,7 +224,7 @@ int testDetection1(IN const std::string& imgDir, IN const std::string& imgSaveDi
                 }
             }
 
-            std::cout<<"imgNumIdx="<<imgNumIdx<<std::endl;
+            std::cout<<"imgNumIdx="<<imgNumIdx<<" 检测到下桥架目标数:"<<lowerBridgeNum<<std::endl;
             if(bridgeNum >0)
             {
                 infeSuccessImgIdx++;
@@ -303,6 +303,7 @@ int testDetection2(IN const std::string& imgDir, IN const std::string& imgSaveDi
         if(!frame.empty())
         {
             // 前处理
+            im_detect2 = frame;
             cv::resize(im_detect2, im_detect_resized2, cv::Size(m_p_yolo_cfg2->feed_w, m_p_yolo_cfg2->feed_h), (0, 0), (0, 0), cv::INTER_LINEAR);
             cv::cvtColor(im_detect_resized2, im_detect_rgb2, cv::COLOR_BGR2RGB);
             HWC2CHW(im_detect_rgb2, chwImgDet2);
@@ -919,7 +920,7 @@ int fuzzyImgJudgeTest_eav(IN const std::string& imgDir, IN const std::string& im
 //     blur_ratio:模糊因子
 // returnValue:None;
 // ----------------------------------->parameters<----------------------------------
-void comput_blur_IQA(IN cv::Mat &gray_img, OUT float &blur_mean, OUT float &blur_ratio)
+void compute_blur_IQA(IN cv::Mat &gray_img, OUT float &blur_mean, OUT float &blur_ratio)
 {
 	//计算水平/竖直差值获取梯度图
 	cv::Mat grad_h, grad_v;
@@ -1080,7 +1081,7 @@ int blurNoiseIQA(IN const std::string& imgPath, IN const std::string& imgSaveDir
  
 	//1、模糊检测
 	float blur_mean = 0.f, blur_ratio = 0.f;
-	comput_blur_IQA(gray_img, blur_mean, blur_ratio);
+	compute_blur_IQA(gray_img, blur_mean, blur_ratio);
  
 	//2、噪声点检测
 	float noise_mean = 0.f, noise_ratio = 0.f;
@@ -1134,7 +1135,7 @@ int main()
     // weatherModelOfflineTest(imgDir);                   //天气模型离线批量测试
     // cleanlinessModelOfflineTest(imgDir);               //清洁度模型离线批量测试
     // testDetection1(imgDir, imgSaveDir);                //检测模型1离线批量测试
-    // testDetection2(imgDir, imgSaveDir);                //检测模型2离线批量测试
+    testDetection2(imgDir, imgSaveDir);                //检测模型2离线批量测试
 
     // fuzzyImgJudgeTest_Tenengrad(imgDir, imgSaveDir);   //模糊图判断-Tenengrad梯度方法 测试函数
     
@@ -1154,7 +1155,7 @@ int main()
 
     // fuzzyImgJudgeTest_Brenner(imgDir, imgSaveDir);
 
-    fuzzyImgJudgeTest_SMD(imgDir, imgSaveDir);
+    // fuzzyImgJudgeTest_SMD(imgDir, imgSaveDir);
     
 
     std::cout<<"测试结束."<<std::endl;

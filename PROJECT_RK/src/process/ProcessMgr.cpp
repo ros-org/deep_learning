@@ -6,7 +6,7 @@
 // 版   权：<Copyright(C) 2023-Leapting Technology Co.,LTD All rights reserved.>
 // 修改记录：
 // 日   期             版本       修改人   走读人  
-// 2023.6.13          3.0.0      白亮亮
+// 2023.7.26          3.0.1      白亮亮
 
 // 修改记录：
 // 2023-05-24:检测到下坡，将发送1次消息改为发多次消息
@@ -23,8 +23,11 @@
 
 #define cameraPtzResetFrequence 100     //相机云台归零频率
 #define bridgeLengthThres 300           //桥架长度阈值
-#define lowerBridgeLengthThres 250      //下坡类别目标长度
-#define ignoreDownBredgeInfo 100        //忽略下桥架消息次数
+#define lowerBridgeLengthThres 310      //下坡类别目标长度
+#define ignoreDownBredgeInfo 70        //忽略下桥架消息次数
+#define ignoreFractureDetTimes 12       //检测到断裂后需要掉头，减速掉头过程中忽略桥架断裂消息的次数
+#define ignoreLargeAngleTimes 12        //分割到桥架角度太大需要掉头，减速掉头过程忽略断裂和角度消息的次数
+#define ignoreSmallAngleTimes 40        //分割角度小，可以通过桥架，过桥的过程忽略断裂和角度消息的次数
 #define minCt 500000                    //一次检测使用的最小时间，小于这个时间则阻塞
 #define saveImgFre 10                   //每获取saveImgFre张图保存一张
 
@@ -62,7 +65,7 @@ int ProcessMgr::init()
         m_b_seg = false;
     }
     m_b_weatherClassification = true;                            // 是否运行天气分类
-    m_b_cla = false;                                              // 清洁度分类标志
+    m_b_cla = false;                                             // 清洁度分类标志
     minCleannessValue = 10.f;                                    // 清洁度最小值
     maxCleannessValue = 90.f;                                    // 清洁度最大值
 
@@ -264,7 +267,7 @@ int ProcessMgr::run()
     int inerval_cnt = 1;                                        //预测帧率(从缓冲区拿到的图片中每隔inerval_cnt检测一次)间隔
     int cnt = 0;                                                //从缓冲区真正拿到图的数量
     int infe_image_num = 0;                                     //用于推理的图像张数
-    float angleThresValue = 10.;                                //角度阈值，当角度不小于该值，认为无法通过
+    float angleThresValue = 365.;                               //角度阈值，当角度不小于该值，认为无法通过
     Timer timer;
     int classifyRes = -999;                                     //定义天气分类的类别结果
     int cleanlinessOutput = -999;                               //清洁度单次推理结果。 最脏的类别为：1；越干净类别数越大；
@@ -279,17 +282,20 @@ int ProcessMgr::run()
     unsigned char restoreSpeed = 0x65;                          //发送给驱动板的 下坡结束，请恢复到原来的速度
     bool lastDownhillStatus = false;                            //上轮检测到的 是否下桥状态，和最新轮的下桥架状态做对比，结果不一致，则发消息并更新状态 
     bool latestDownhillStatus = false;                          //本轮检测到的是否下桥架状态
-    bool lastfractureStatus = false;                            //上次是否断裂的状态
-    bool latestFractureStatus = false;                          //最新是否断裂状态
-    bool lastAngleStatus = false;                               //上次角度是否太大的状态
-    bool latestAngleStatus = false;                             //当前角度是否太大的状态
+    // bool lastfractureStatus = false;                         //上次是否断裂的状态
+    // bool latestFractureStatus = false;                       //最新是否断裂状态
+    int fractureStatus = -999;                                  //检测到断裂保证只发一次，之后掉头的过程这个状态保持几秒；
+    // bool lastAngleStatus = false;                            //上次角度是否太大的状态
+    // bool latestAngleStatus = false;                          //当前角度是否太大的状态
+    int angleLargeStatus = -999;                                //角度太大时保证只发一次掉头，掉头的过程中该状态保持几秒；
+    int angleSmallStatus = -999;                                //角度小，桥架可通过，过桥架这段时间不发任何断裂或角度太大的消息；
     unsigned char signalFromMsgThread = 255;                    //从消息线程获取到的消息
     unsigned char msgsTomsgThread[4] = {254, 90, 254, 254};     //存储检测的各种信息的数组，当其中有值发生变化就立刻发送到消息线程，254是视觉询问驱动板专用数值(当所以值为254时，认为一切正常)；
     high_resolution_clock::time_point beginTime;                //当前图片检测开始起始时间
     high_resolution_clock::time_point endTime;                  //当前图片检测结束结束时间
     milliseconds timeInterval;                                  //当前图片检测时间间隔
     int downBridgeSleepTimes = 99999;                           //减速、加速计数
-    bool bSaveOrgImage = true;                                  //是否保存原始图像  
+    bool bSaveOrgImage = false;                                 //是否保存原始图像  
     unsigned char cameraStatus = 0;                             //相机方向状态1,0代表清洗机没有动，不用管相机方向
     unsigned char cameraStatus2 = 0;                            //相机方向状态2
     vector<float *> res;                                        //存放第一个检测模型的推理结果
@@ -341,13 +347,7 @@ int ProcessMgr::run()
         writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[1]);
         writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[2]);
         writeMsgToLogfile("当前给开发板发送的消息是", msgsTomsgThread[3]);
-        // std::cout<<"主线程发给消息线程的消息:"<<int(msgsTomsgThread[0])<<"  "<<int(msgsTomsgThread[1])<<"  "<<int(msgsTomsgThread[2])<<"  "<<int(msgsTomsgThread[3])<<std::endl;
-        if(detInfo == msgsTomsgThread[3] || segInfo == msgsTomsgThread[3])
-        {
-            //上次检测到断裂，掉头运行需要先减速，减速日时阻塞一段时间直到返回到第一次检到测断裂的位置之外
-            std::cout<<"准备减速"<<std::endl;
-            // usleep(7000000);
-        }
+
         // 重置上次的检测结果
         msgsTomsgThread[2] = 254;
         msgsTomsgThread[3] = 254;
@@ -685,8 +685,6 @@ int ProcessMgr::run()
                 {
                     m_b_detect2 = false;
                     m_b_seg = false;
-                    lastfractureStatus = false;
-                    lastAngleStatus = false;
                     writeMsgToLogfile("未切到用于检测2的图像!", m_b_detect2);
                     std::cout<<"未切到用于检测2的图像"<<std::endl;
                 }
@@ -695,8 +693,6 @@ int ProcessMgr::run()
             {
                 m_b_detect2 = false;
                 m_b_seg = false;
-                lastfractureStatus = false;
-                lastAngleStatus = false;
             }
  
             // 6.10、保存日志及检测结果图
@@ -767,36 +763,23 @@ int ProcessMgr::run()
                 }
             }
 
-            // 7.6、是否有断裂 状态判断，两次状态不一致则发消息(这样可以做到 只发一次断裂/无断裂的消息给驱动板）                          
+            // 7.6、是否有断裂                          
             if(fractureNum > 0)
             {
-                latestFractureStatus = true;
                 m_b_seg = false;
-                lastAngleStatus = false;
+                msgsTomsgThread[3] = detInfo;
+                if(-999 == fractureStatus)
+                {
+                    fractureStatus = 0;
+                }                
                 writeMsgToLogfile2("**************************************检测到断裂,机器准备返回*************************************", 0);
                 std::cout<<"**************************************检测到断裂*************************************"<<std::endl;
             }
             else
             {
-                latestFractureStatus = false;
                 m_b_seg = true;
                 writeMsgToLogfile("检测到桥架区域无断裂,将分割模型标识符置为true", m_b_seg);
                 std::cout<<"**********未检测到断裂**********"<<std::endl;
-            }
-
-            if(lastfractureStatus != latestFractureStatus)
-            {
-                if(lastfractureStatus==false && latestFractureStatus==true)
-                {
-                    msgsTomsgThread[3] = detInfo;
-                    writeMsgToLogfile("发送检测结果到消息线程：上次无断裂，这次有断裂", detInfo);
-                }
-                else
-                {
-                    writeMsgToLogfile2("发送检测结果到消息线程：上次断裂，这次无断裂", 666);
-                }
-
-                lastfractureStatus = latestFractureStatus;
             }
             
             // 7.7、保存日志及检测结果图
@@ -858,38 +841,24 @@ int ProcessMgr::run()
             ret = (int)postProcessingSegRes(seg_res,angle);
             writeMsgToLogfile2("分割后计算角度结果", angle);
 
-            // 8.5、根据角度值，给驱动板发消息及状态更新
+            // 8.5、根据角度值，给驱动板发消息
             if(angle >= angleThresValue)
             {
-                latestAngleStatus = true;
+                msgsTomsgThread[3] = segInfo;
+                if(-999 == angleLargeStatus)
+                {
+                    angleLargeStatus = 0;
+                }                
+                writeMsgToLogfile("发送分割角度结果的消息(角度太大，本次无法通过)到消息线程", segInfo);
             }
             else
             {
-                latestAngleStatus = false;
+                if(-999 == angleSmallStatus)
+                {
+                    angleSmallStatus = 0;
+                }
+                writeMsgToLogfile2("发送分割角度结果的消息(角度不大，本次可以通过)到消息线程", 666);
             }
-
-            if(false == lastAngleStatus && true == latestAngleStatus)
-            {
-                msgsTomsgThread[3] = segInfo;
-                writeMsgToLogfile("发送分割角度结果的消息(上次可以通过，本次无法通过)到消息线程", segInfo);
-            }
-            
-            if(true == lastAngleStatus && false == latestAngleStatus)
-            {
-                std::cout<<"++++++++++++++++++++++++++++发送分割角度结果的消息(上次无法通过，本次可以通过)到消息线程++++++++++++++++++++++++++++"<<std::endl;
-                writeMsgToLogfile2("++++++++++++++++++++++++++++发送分割角度结果的消息(上次无法通过，本次可以通过)到消息线程++++++++++++++++++++++++++++", 666);
-                sleep(20);
-            }
-
-            if(lastAngleStatus==false && latestAngleStatus==false)
-            {
-                // 检测到桥架了，且没断、角度也不大,可以通过，在通过桥架的过程，不做任何操作
-                std::cout<<"++++++++++++++++++++++++++++分割到可以通过，进行阻塞++++++++++++++++++++++++++++"<<std::endl;
-                writeMsgToLogfile2("++++++++++++++++++++++++++++分割到可以通过，进行阻塞++++++++++++++++++++++++++++", 0);
-                sleep(20);
-            }
-            lastAngleStatus = latestAngleStatus;
-
             #endif
 
             // 8.6、写日志及将分割结果图保存到硬盘上
@@ -918,6 +887,52 @@ int ProcessMgr::run()
 
         }
         //---------------------------->8、分割<-----------------------------//
+
+        
+        //--->检测出一次断裂强制改变断裂消息值，保证检测到一次断裂几秒内只发一次断裂消息<---//
+        if(fractureStatus>=0)
+        {
+            fractureStatus++;
+            if(fractureStatus>1)
+            {
+                msgsTomsgThread[3] = 254;
+
+                if(fractureStatus == ignoreFractureDetTimes)
+                {
+                    fractureStatus = -999;
+                }
+            }
+        }
+        //--->检测出一次断裂强制改变断裂消息值，保证检测到一次断裂几秒内只发一次断裂消息<---//
+
+
+        //-------->检测出一次角度大，保证几秒内只发一次角度太大的消息<--------//
+        if(angleLargeStatus >= 0)
+        {
+            angleLargeStatus++;
+            if(angleLargeStatus>1)
+            {
+                msgsTomsgThread[3] = 254;
+                if(ignoreLargeAngleTimes == angleLargeStatus)
+                {
+                    angleLargeStatus = -999;
+                }
+            }
+        }
+        //-------->检测出一次角度大，保证几秒内只发一次角度太大的消息<--------//
+
+
+        //-------->检测出一次角度小可以通过，过桥的过程忽略多次角度大或者断裂消息<--------//
+        if(angleSmallStatus >= 0)
+        {
+            angleSmallStatus++;
+            msgsTomsgThread[3] = 254;
+            if(ignoreSmallAngleTimes == angleSmallStatus)
+            {
+                angleSmallStatus = -999;
+            }
+        }
+        //-------->检测出一次角度小可以通过，过桥的过程忽略多次角度大或者断裂消息<--------//
 
 
         //注意：当主线程比消息线程快的时候，就无法保证上次的消息真正发出去，所以此处要稍微阻塞一下主线程
