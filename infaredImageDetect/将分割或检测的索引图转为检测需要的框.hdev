@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hdevelop file_version="1.2" halcon_version="18.11.2.0">
+<procedure name="main">
+<interface/>
+<body>
+<c>* ==========================================================</c>
+<c>* 功能  ：1、将每个索引图转成一个txt（图片名称，宽高、框类别及坐标)</c>
+<c>*         2、将这一堆索引图转成一个txt（用于FCOS 基于libtorch的纯C++训练)</c>
+<c>* 注意：None</c>
+<c>* 文件名  ：将分割或检测的索引图转为检测需要的框.hdev</c>
+<c>* 相关文件：无</c>
+<c>* 作者    ：Liangliang Bai (liangliang.bai@leapting.com)</c>
+<c>* 版权    ：&lt;Copyright(C) 2022- Hu Zhou leapting Technology Co., Ltd. All rights reserved.&gt;</c>
+<c>* 修改记录：</c>
+<c>* 日  期        版本     修改人   走读人  修改记录</c>
+<c>* 2023.08.01    1.0.0.1  白亮亮</c>
+<c>* ==========================================================</c>
+<c></c>
+<c></c>
+<c>*----------------------------&gt;待修改的参数&lt;----------------------------*</c>
+<c>* 数据基本文件夹</c>
+<l>base_dir:='D:/LT_DATASETS_PATROL_ROBOT/segmentation/train/'  </l>
+<c>* 分割或检测的索引图所在文件夹</c>
+<l>seg_label_dir:=base_dir+'index_image_aug/' </l>
+<c>* 待训练的图片所在文件夹</c>
+<l>train_images_dir:=base_dir+'image_aug/'            </l>
+<l>label_name:= ['_background', 'abnormal']</l>
+<l>label_index_value:=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]</l>
+<c>* 转换好的txt所在文件夹，每个索引图会转一个txt文件；</c>
+<l>txt_base_dir:=base_dir+'txt_aug/'  </l>
+<c>* 符合libtorch版本FCOS需要的标签，将所有数据的名称路径、框坐标、类别写在一个txt中；    </c>
+<l>FCOS_Lines_txt_dir:=base_dir+'lines.txt'  </l>
+<c>*----------------------------&gt;待修改的参数&lt;----------------------------*</c>
+<c></c>
+<l>file_exists (txt_base_dir, FileExists)</l>
+<l>if(not(FileExists))</l>
+<l>    make_dir(txt_base_dir)</l>
+<l>endif</l>
+<c></c>
+<l>open_file (FCOS_Lines_txt_dir, 'output', FileHandle1)</l>
+<c></c>
+<l as_id="image_acquisition" as_name="Image Acquisition 02" as_grp="[1,2]" as_ord="1">list_files (seg_label_dir, ['files','follow_links'], ImageFiles)</l>
+<l as_id="image_acquisition" as_name="Image Acquisition 02" as_grp="[1,3]" as_ord="1">tuple_regexp_select (ImageFiles, ['\\.(tif|tiff|gif|bmp|jpg|jpeg|jp2|png|pcx|pgm|ppm|pbm|xwd|ima|hobj)$','ignore_case'], ImageFiles)</l>
+<l as_id="image_acquisition" as_name="Image Acquisition 02" as_grp="[2,2]" as_ord="1">for Index := 0 to |ImageFiles| - 1 by 1   </l>
+<l>    parse_filename (ImageFiles[Index], BaseName, Extension, Directory)</l>
+<l>    fwrite_string (FileHandle1, train_images_dir+BaseName+'.'+Extension+' ')  //将待训练的图片路径写入txt</l>
+<l as_id="image_acquisition" as_name="Image Acquisition 02" as_grp="[2,3]" as_ord="1">    read_image (Image, ImageFiles[Index])</l>
+<l>    get_image_size (Image, Width, Height)</l>
+<l>    dev_set_draw ('fill')</l>
+<c>    </c>
+<l>    open_file(txt_base_dir+'/'+BaseName+'.txt','output',FileHandle)</l>
+<l>    fwrite_string(FileHandle,BaseName+'.'+Extension)</l>
+<l>    fnew_line(FileHandle)</l>
+<l>    fwrite_string(FileHandle,Width+' '+Height)</l>
+<l>    fnew_line(FileHandle)</l>
+<c>        </c>
+<l>    for class_id:=1 to |label_name| by 1</l>
+<l>        threshold (Image, Region, label_index_value[class_id], label_index_value[class_id])</l>
+<l>        closing_circle (Region, Region, 5)</l>
+<l>        connection (Region, ConnectedRegions)</l>
+<l>        select_shape (ConnectedRegions, ConnectedRegions, 'area', 'and', 5, 1000000000000)</l>
+<l>        count_obj (ConnectedRegions, Number)</l>
+<c>        </c>
+<l>        gen_empty_obj (BBox)</l>
+<c>        </c>
+<l>        X_LeftUp:=[]</l>
+<l>        Y_LeftUp:=[]</l>
+<l>        X_RightDown:=[]</l>
+<l>        Y_RightDown:=[]</l>
+<c>        </c>
+<l>        points:=[]</l>
+<c></c>
+<l>        for i:=1 to Number by 1</l>
+<l>            copy_obj (ConnectedRegions, ObjectsSelected, i, 1)</l>
+<l>            smallest_rectangle1 (ObjectsSelected, Row1, Column1, Row2, Column2)</l>
+<l>            gen_rectangle1 (Rectangle, Row1, Column1, Row2, Column2)</l>
+<l>            union2 (BBox, Rectangle, BBox)</l>
+<l>            X_LeftUp:=[X_LeftUp, Row1]</l>
+<l>            Y_LeftUp:=[Y_LeftUp, Column1]</l>
+<l>            X_RightDown:=[X_RightDown, Row2]</l>
+<l>            Y_RightDown:=[Y_RightDown, Column2]</l>
+<l>            dev_set_draw ('margin')</l>
+<l>            dev_display (Image)</l>
+<l>            dev_display (BBox)</l>
+<c>            </c>
+<l>            points:=[points, Row1]</l>
+<l>            points:=[points, Column1]</l>
+<l>            points:=[points, Row2]</l>
+<l>            points:=[points, Column2]</l>
+<l>            fwrite_string(FileHandle,class_id+' '+Column1+' '+ Row1+' '+Column2+' '+Row2)</l>
+<l>            fnew_line(FileHandle)</l>
+<c>            </c>
+<l>            fwrite_string(FileHandle1,Column1+','+ Row1+','+Column2+','+Row2+ ','+class_id+'  ')</l>
+<l>        endfor</l>
+<l>*         stop()</l>
+<l>    endfor</l>
+<l>    close_file(FileHandle)</l>
+<l>    fnew_line(FileHandle1)</l>
+<l as_id="image_acquisition" as_name="Image Acquisition 02" as_grp="[3,1]" as_ord="1">endfor</l>
+<c></c>
+<l>close_file(FileHandle1)</l>
+<c></c>
+</body>
+<docu id="main">
+<parameters/>
+</docu>
+</procedure>
+</hdevelop>
